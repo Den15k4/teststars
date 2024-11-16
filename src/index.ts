@@ -9,23 +9,10 @@ if (!process.env.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.BOT_TOKEN}`;
 
 interface LabeledPrice {
     label: string;
     amount: number;
-}
-
-// Функция для создания платежной клавиатуры
-function getPaymentKeyboard() {
-    return {
-        inline_keyboard: [
-            [{
-                text: "Оплатить 20 ⭐️",
-                pay: true
-            }]
-        ]
-    };
 }
 
 // Обработчик команды /start
@@ -38,15 +25,15 @@ bot.command('start', async (ctx) => {
         ];
 
         // Отправляем invoice
-        await ctx.telegram.sendInvoice(ctx.chat.id, {
-            title: "Поддержка канала",
-            description: "Поддержать канал на 20 звёзд!",
-            payload: "channel_support",
-            currency: "XTR",
-            prices: prices,
-            provider_token: "", // Для Telegram Stars оставляем пустым
-            reply_markup: getPaymentKeyboard()
-        });
+        await ctx.telegram.sendInvoice(
+            ctx.chat.id,
+            "Поддержка канала",
+            "Поддержать канал на 20 звёзд!",
+            "channel_support",
+            "",  // provider_token (пустой для Telegram Stars)
+            "XTR", // currency
+            prices
+        );
         
     } catch (error) {
         console.error('Ошибка в команде start:', error);
