@@ -1,4 +1,5 @@
 import { Telegraf, Context } from 'telegraf';
+import axios from 'axios';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -7,29 +8,27 @@ if (!process.env.BOT_TOKEN) {
     throw new Error('BOT_TOKEN is required in .env file');
 }
 
-interface SendMessageWithStars {
-    chat_id: number;
-    text: string;
-    stars_amount: number;
-    parse_mode?: string;
-    reply_markup?: any;
-}
-
 const bot = new Telegraf(process.env.BOT_TOKEN);
+const TELEGRAM_API = `https://api.telegram.org/bot${process.env.BOT_TOKEN}`;
 
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
-        const messageParams: SendMessageWithStars = {
+        // Прямой запрос к API Telegram
+        await axios.post(`${TELEGRAM_API}/sendMessage`, {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
-            stars_amount: 1
-        };
-
-        // Используем прямой запрос к API
-        await bot.telegram.callApi('sendMessage', messageParams as any);
+            message_auto_delete_time: 60,
+            stars_price: {
+                amount: 100,  // Цена в копейках (1 рубль = 100 копеек)
+                currency: 'RUB'
+            }
+        });
     } catch (error) {
         console.error('Ошибка в команде start:', error);
+        if (axios.isAxiosError(error)) {
+            console.error('Детали ошибки API:', error.response?.data);
+        }
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
 });
