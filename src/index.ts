@@ -34,20 +34,26 @@ bot.action('buy_stars', async (ctx) => {
     try {
         await ctx.answerCbQuery();
 
-        // Отправляем запрос напрямую через axios
-        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+        // Отправляем invoice для звезд
+        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerInvoice`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 chat_id: ctx.chat!.id,
-                text: "Поддержать канал на 20 звёзд!",
-                parse_mode: "HTML",
-                star_params: {
-                    star_count: 20,
-                    is_premium: false
-                }
+                title: "Поддержка канала",
+                description: "Поддержать канал на 20 звёзд!",
+                payload: "stars_payment",
+                currency: "XTR",
+                prices: [{
+                    label: "XTR",
+                    amount: 20
+                }],
+                provider_token: "",
+                need_shipping_address: false,
+                is_flexible: false,
+                protect_content: false
             })
         });
 
@@ -60,13 +66,34 @@ bot.action('buy_stars', async (ctx) => {
     }
 });
 
-// Обработчик получения звезды
-bot.on('message_reaction', async (ctx) => {
+// Обработчик пре-чекаута
+bot.on('pre_checkout_query', async (ctx) => {
     try {
-        console.log('Получена реакция:', ctx.update);
+        // Всегда подтверждаем пре-чекаут
+        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerPreCheckoutQuery`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                pre_checkout_query_id: ctx.preCheckoutQuery?.id,
+                ok: true
+            })
+        });
+
+        const data = await response.json();
+        console.log('Ответ пре-чекаута:', data);
+    } catch (error) {
+        console.error('Ошибка при пре-чекауте:', error);
+    }
+});
+
+// Обработчик успешного платежа
+bot.on('successful_payment', async (ctx) => {
+    try {
         await ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
     } catch (error) {
-        console.error('Ошибка при обработке платежа:', error);
+        console.error('Ошибка при обработке успешного платежа:', error);
     }
 });
 
