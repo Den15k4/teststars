@@ -12,20 +12,12 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
-        await ctx.reply(
-            '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n' +
-            '⭐️ Нажми на кнопку ниже, чтобы отправить 1 звезду!',
-            {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{
-                            text: '⭐️ Поддержать 1 звездой',
-                            url: 'tg://stars/subscribe?id=teststarsbot'
-                        }]
-                    ]
-                }
-            }
-        );
+        // Используем прямой вызов API
+        await bot.telegram.callApi('sendMessage', {
+            chat_id: ctx.chat.id,
+            text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
+            stars_amount: 1
+        });
     } catch (error) {
         console.error('Ошибка в команде start:', error);
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
