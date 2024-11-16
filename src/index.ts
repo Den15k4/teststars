@@ -9,26 +9,39 @@ if (!process.env.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.BOT_TOKEN}`;
 
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
-        // Прямой запрос к API Telegram
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
-            chat_id: ctx.chat.id,
-            text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
-            message_auto_delete_time: 60,
-            stars_price: {
-                amount: 100,  // Цена в копейках (1 рубль = 100 копеек)
-                currency: 'RUB'
+        await ctx.reply(
+            '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{
+                            text: '⭐️ Поддержать звездой',
+                            callback_data: 'give_star'
+                        }]
+                    ]
+                }
             }
-        });
+        );
     } catch (error) {
         console.error('Ошибка в команде start:', error);
-        if (axios.isAxiosError(error)) {
-            console.error('Детали ошибки API:', error.response?.data);
-        }
+        await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
+    }
+});
+
+// Обработчик нажатия кнопки
+bot.action('give_star', async (ctx) => {
+    try {
+        await ctx.answerCbQuery();
+        
+        // Отправляем сообщение с запросом звезды
+        await ctx.reply('⭐️ Отправьте звезду в ответ на это сообщение');
+        
+    } catch (error) {
+        console.error('Ошибка при обработке кнопки:', error);
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
 });
