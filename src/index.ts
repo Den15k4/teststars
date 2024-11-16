@@ -16,16 +16,24 @@ bot.command('start', async (ctx) => {
     try {
         console.log('Получена команда /start от пользователя:', ctx.from?.id);
         
-        // Отправляем одно сообщение с возможностью отправить звезду
+        // Отправляем сообщение с типом stars
         await axios.post(`${TELEGRAM_API}/sendMessage`, {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n⭐️ Нажмите на кнопку со звездочкой сверху, чтобы отправить звезду!',
-            can_be_starred: true
+            can_be_starred: true,
+            message_type: "stars",
+            stars_price: {
+                amount: 100,  // 1 рубль = 100 копеек
+                currency: "RUB"
+            }
         });
         
         console.log('Сообщение отправлено пользователю:', ctx.from?.id);
     } catch (error) {
         console.error('Ошибка в команде start:', error);
+        if (axios.isAxiosError(error)) {
+            console.error('Ответ API:', error.response?.data);
+        }
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
 });
@@ -34,6 +42,7 @@ bot.command('start', async (ctx) => {
 bot.on('message_reaction', async (ctx: Context) => {
     try {
         console.log('Получена реакция:', ctx.update);
+        // Здесь будет обработка успешной оплаты звездой
     } catch (error) {
         console.error('Ошибка при обработке реакции:', error);
     }
