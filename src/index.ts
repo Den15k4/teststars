@@ -15,41 +15,46 @@ const TELEGRAM_API = `https://api.telegram.org/bot${process.env.BOT_TOKEN}`;
 bot.command('start', async (ctx) => {
     try {
         console.log('Получена команда /start от пользователя:', ctx.from?.id);
-        
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
+
+        const message = {
             chat_id: ctx.chat.id,
-            text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n⭐️ Нажмите на кнопку со звездочкой сверху, чтобы отправить звезду!',
-            stars_watermark: true,
-            stars_prices: [{
-                amount: 100,
-                currency: "RUB"
-            }]
-        });
+            text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
+            entities: [
+                {
+                    type: 'stars',
+                    offset: 0,
+                    length: 1,
+                    star_params: {
+                        star_price: {
+                            amount: 100,
+                            currency: "RUB"
+                        }
+                    }
+                }
+            ],
+            parse_mode: 'HTML',
+            parse_entities: true
+        };
+
+        // Сначала логируем, что отправляем
+        console.log('Отправляем сообщение:', JSON.stringify(message, null, 2));
         
-        console.log('Сообщение отправлено пользователю:', ctx.from?.id);
+        const response = await axios.post(`${TELEGRAM_API}/sendMessage`, message);
+        
+        // Логируем ответ
+        console.log('Ответ API:', response.data);
+        
     } catch (error) {
         console.error('Ошибка в команде start:', error);
         if (axios.isAxiosError(error)) {
             console.error('Ответ API:', error.response?.data);
-            console.error('Запрос:', error.config?.data);
+            console.error('Данные запроса:', error.config?.data);
         }
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
 });
 
-// Обработчик получения звезды
-bot.on('message_reaction', async (ctx: Context) => {
-    try {
-        console.log('Получена реакция:', ctx.update);
-    } catch (error) {
-        console.error('Ошибка при обработке реакции:', error);
-    }
-});
-
-bot.catch((err: unknown) => {
-    console.error('Ошибка в боте:', err);
-});
-
+// Запуск бота
 bot.launch().then(() => {
     console.log('Бот успешно запущен!');
     console.log('Имя бота:', bot.botInfo?.username);
@@ -57,6 +62,7 @@ bot.launch().then(() => {
     console.error('Ошибка при запуске бота:', err);
 });
 
+// Graceful shutdown
 process.once('SIGINT', () => {
     console.log('Получен сигнал SIGINT');
     bot.stop('SIGINT');
