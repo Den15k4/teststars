@@ -12,6 +12,8 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
+        const botInfo = await bot.telegram.getMe();
+        
         await ctx.reply(
             '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n' +
             '⭐️ Нажми на кнопку ниже, чтобы отправить 1 звезду!',
@@ -20,7 +22,8 @@ bot.command('start', async (ctx) => {
                     inline_keyboard: [
                         [{
                             text: '⭐️ Поддержать 1 звездой',
-                            url: 'tg://star/' // здесь будет ID для звезды
+                            // Используем username бота для формирования ссылки
+                            url: `https://t.me/${botInfo.username}/star`
                         }]
                     ]
                 }
