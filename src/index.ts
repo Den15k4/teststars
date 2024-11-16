@@ -34,22 +34,14 @@ bot.action('buy_stars', async (ctx) => {
     try {
         await ctx.answerCbQuery();
         
-        // Создаем invoice для звезд, как в Python примере
-        const invoice = {
-            chat_id: ctx.chat!.id,
-            title: "Поддержка канала",
-            description: "Поддержать канал на 20 звёзд!",
-            payload: "channel_support",
-            provider_token: "", // для звезд оставляем пустым
-            currency: "XTR",
-            prices: [{
-                label: "XTR",
-                amount: 20
+        await ctx.telegram.sendMessage(ctx.chat!.id, "Поддержать канал на 20 звёзд!", {
+            custom_emoji_id: "⭐️",
+            entities: [{
+                type: "custom_emoji",
+                offset: 0,
+                length: 1
             }]
-        };
-
-        // Отправляем через прямой вызов API
-        await ctx.telegram.callApi('createInvoice', invoice);
+        });
 
     } catch (error) {
         console.error('Ошибка при создании платежа:', error);
@@ -57,21 +49,13 @@ bot.action('buy_stars', async (ctx) => {
     }
 });
 
-// Обработчик пре-чекаута
-bot.on('pre_checkout_query', async (ctx) => {
-    try {
-        await ctx.answerPreCheckoutQuery(true);
-    } catch (error) {
-        console.error('Ошибка при пре-чекауте:', error);
-    }
-});
-
 // Обработчик успешного платежа
-bot.on('successful_payment', async (ctx) => {
+bot.on('message_reaction', async (ctx) => {
     try {
+        console.log('Получена реакция:', ctx.update);
         await ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
     } catch (error) {
-        console.error('Ошибка при обработке успешного платежа:', error);
+        console.error('Ошибка при обработке платежа:', error);
     }
 });
 
