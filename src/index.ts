@@ -1,5 +1,4 @@
 import { Telegraf, Context } from 'telegraf';
-import axios from 'axios';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -10,73 +9,33 @@ if (!process.env.BOT_TOKEN) {
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-interface LabeledPrice {
-    label: string;
-    amount: number;
-}
-
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
-        console.log('Получена команда /start от пользователя:', ctx.from?.id);
-
-        const chatId = ctx.chat.id;
-        const text = '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n⭐️ Нажмите кнопку, чтобы поддержать!';
-
-        // Используем прямой вызов API через axios
-        await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
-            chat_id: chatId,
-            text: text,
-            reply_markup: {
-                inline_keyboard: [[
-                    {
-                        text: "Оплатить 20 ⭐️",
-                        callback_data: "pay_stars"
-                    }
-                ]]
-            }
+        // Используем reply вместо sendMessage для отправки "звездного" сообщения
+        await ctx.reply('👋 Привет! Я тестовый бот для оплаты через Telegram Stars.', {
+            message_type: 'stars',
+            entities: [{
+                type: 'stars',
+                offset: 0,
+                length: 1,
+                star_count: 20
+            }]
         });
-        
     } catch (error) {
         console.error('Ошибка в команде start:', error);
-        if (axios.isAxiosError(error)) {
-            console.error('Ответ API:', error.response?.data);
-        }
+        console.error('Детали ошибки:', error);
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
 });
 
-// Обработчик нажатия кнопки оплаты
-bot.action('pay_stars', async (ctx) => {
+// Обработчик получения звезды
+bot.on('message_reaction', async (ctx: Context) => {
     try {
-        await ctx.answerCbQuery();
-
-        // Отправляем сообщение для покупки звезд
-        const response = await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
-            chat_id: ctx.chat?.id,
-            text: 'Поддержать канал на 20 звёзд!',
-            provider_data: {
-                currency: "XTR",
-                amount: 20
-            }
-        });
-
-        console.log('Ответ API:', response.data);
-    } catch (error) {
-        console.error('Ошибка при создании платежа:', error);
-        if (axios.isAxiosError(error)) {
-            console.error('Ответ API:', error.response?.data);
-        }
-        await ctx.reply('Произошла ошибка при создании платежа. Попробуйте позже.');
-    }
-});
-
-// Обработчик успешной оплаты
-bot.on('successful_payment', async (ctx) => {
-    try {
+        console.log('Получена реакция:', ctx.update);
         await ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
     } catch (error) {
-        console.error('Ошибка при обработке успешного платежа:', error);
+        console.error('Ошибка при обработке реакции:', error);
     }
 });
 
