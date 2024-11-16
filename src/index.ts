@@ -16,15 +16,21 @@ bot.command('start', async (ctx) => {
     try {
         console.log('Получена команда /start от пользователя:', ctx.from?.id);
         
-        // Отправляем сообщение с типом stars
+        // Отправляем сообщение со специальной разметкой для звезд
         await axios.post(`${TELEGRAM_API}/sendMessage`, {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n⭐️ Нажмите на кнопку со звездочкой сверху, чтобы отправить звезду!',
-            can_be_starred: true,
-            message_type: "stars",
-            stars_price: {
-                amount: 100,  // 1 рубль = 100 копеек
-                currency: "RUB"
+            reply_markup: {
+                stars: {
+                    settings: {
+                        min_stars: 1,
+                        max_stars: 1,
+                        price_per_star: {
+                            amount: 100,  // 1 рубль = 100 копеек
+                            currency: "RUB"
+                        }
+                    }
+                }
             }
         });
         
