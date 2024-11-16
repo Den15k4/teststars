@@ -20,7 +20,7 @@ bot.command('start', async (ctx) => {
                     inline_keyboard: [
                         [{
                             text: '⭐️ Поддержать 1 звездой',
-                            url: 'https://t.me/telegramstars/donate/teststarsbot'
+                            url: 'tg://stars/subscribe?id=teststarsbot'
                         }]
                     ]
                 }
