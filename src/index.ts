@@ -19,36 +19,31 @@ bot.command('start', async (ctx) => {
         const message = {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
-            entities: [
-                {
-                    type: 'stars',
-                    offset: 0,
-                    length: 1,
-                    star_params: {
-                        star_price: {
-                            amount: 100,
-                            currency: "RUB"
-                        }
-                    }
+            star_message: true,
+            star_settings: {
+                price: {
+                    amount: 100,
+                    currency: "RUB"
                 }
-            ],
-            parse_mode: 'HTML',
-            parse_entities: true
+            }
         };
 
-        // Сначала логируем, что отправляем
-        console.log('Отправляем сообщение:', JSON.stringify(message, null, 2));
-        
-        const response = await axios.post(`${TELEGRAM_API}/sendMessage`, message);
-        
-        // Логируем ответ
+        const response = await axios.post(`${TELEGRAM_API}/sendMessage`, message, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Bot-Api-Secret-Token': process.env.BOT_TOKEN,
+                'X-Telegram-Bot-Api-Star-Message': 'true'
+            }
+        });
+
         console.log('Ответ API:', response.data);
         
     } catch (error) {
         console.error('Ошибка в команде start:', error);
         if (axios.isAxiosError(error)) {
-            console.error('Ответ API:', error.response?.data);
-            console.error('Данные запроса:', error.config?.data);
+            console.error('Ответ API:', JSON.stringify(error.response?.data, null, 2));
+            console.error('Данные запроса:', JSON.stringify(error.config?.data, null, 2));
+            console.error('Заголовки запроса:', JSON.stringify(error.config?.headers, null, 2));
         }
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
     }
