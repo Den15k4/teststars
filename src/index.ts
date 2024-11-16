@@ -19,21 +19,23 @@ interface LabeledPrice {
 bot.command('start', async (ctx) => {
     try {
         console.log('Получена команда /start от пользователя:', ctx.from?.id);
-        
-        const prices: LabeledPrice[] = [
-            { label: "XTR", amount: 20 }
-        ];
 
-        // Отправляем invoice
-        await ctx.telegram.sendInvoice(
-            ctx.chat.id,
-            "Поддержка канала",
-            "Поддержать канал на 20 звёзд!",
-            "channel_support",
-            "",  // provider_token (пустой для Telegram Stars)
-            "XTR", // currency
-            prices
-        );
+        const chatId = ctx.chat.id;
+        const text = '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n⭐️ Нажмите кнопку, чтобы поддержать!';
+
+        // Используем прямой вызов API через axios
+        await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: text,
+            reply_markup: {
+                inline_keyboard: [[
+                    {
+                        text: "Оплатить 20 ⭐️",
+                        callback_data: "pay_stars"
+                    }
+                ]]
+            }
+        });
         
     } catch (error) {
         console.error('Ошибка в команде start:', error);
@@ -44,30 +46,38 @@ bot.command('start', async (ctx) => {
     }
 });
 
-// Обработчик пре-чекаута
-bot.on('pre_checkout_query', async (ctx) => {
+// Обработчик нажатия кнопки оплаты
+bot.action('pay_stars', async (ctx) => {
     try {
-        await ctx.answerPreCheckoutQuery(true);
+        await ctx.answerCbQuery();
+
+        // Отправляем сообщение для покупки звезд
+        const response = await axios.post(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+            chat_id: ctx.chat?.id,
+            text: 'Поддержать канал на 20 звёзд!',
+            provider_data: {
+                currency: "XTR",
+                amount: 20
+            }
+        });
+
+        console.log('Ответ API:', response.data);
     } catch (error) {
-        console.error('Ошибка при пре-чекауте:', error);
+        console.error('Ошибка при создании платежа:', error);
+        if (axios.isAxiosError(error)) {
+            console.error('Ответ API:', error.response?.data);
+        }
+        await ctx.reply('Произошла ошибка при создании платежа. Попробуйте позже.');
     }
 });
 
-// Обработчик успешного платежа
+// Обработчик успешной оплаты
 bot.on('successful_payment', async (ctx) => {
     try {
         await ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
     } catch (error) {
         console.error('Ошибка при обработке успешного платежа:', error);
     }
-});
-
-// Команда /paysupport
-bot.command('paysupport', async (ctx) => {
-    await ctx.reply(
-        'Добровольные пожертвования не подразумевают возврат средств, ' +
-        'однако, если вы очень хотите вернуть средства - свяжитесь с нами.'
-    );
 });
 
 // Запуск бота
