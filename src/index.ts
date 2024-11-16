@@ -33,15 +33,26 @@ bot.command('start', async (ctx) => {
 bot.action('buy_stars', async (ctx) => {
     try {
         await ctx.answerCbQuery();
-        
-        await ctx.telegram.sendMessage(ctx.chat!.id, "Поддержать канал на 20 звёзд!", {
-            custom_emoji_id: "⭐️",
-            entities: [{
-                type: "custom_emoji",
-                offset: 0,
-                length: 1
-            }]
+
+        // Отправляем запрос напрямую через axios
+        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                chat_id: ctx.chat!.id,
+                text: "Поддержать канал на 20 звёзд!",
+                parse_mode: "HTML",
+                star_params: {
+                    star_count: 20,
+                    is_premium: false
+                }
+            })
         });
+
+        const data = await response.json();
+        console.log('Ответ API:', data);
 
     } catch (error) {
         console.error('Ошибка при создании платежа:', error);
@@ -49,7 +60,7 @@ bot.action('buy_stars', async (ctx) => {
     }
 });
 
-// Обработчик успешного платежа
+// Обработчик получения звезды
 bot.on('message_reaction', async (ctx) => {
     try {
         console.log('Получена реакция:', ctx.update);
