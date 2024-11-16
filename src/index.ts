@@ -7,17 +7,27 @@ if (!process.env.BOT_TOKEN) {
     throw new Error('BOT_TOKEN is required in .env file');
 }
 
+interface SendMessageWithStars {
+    chat_id: number;
+    text: string;
+    stars_amount: number;
+    parse_mode?: string;
+    reply_markup?: any;
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
-        // Используем прямой вызов API
-        await bot.telegram.callApi('sendMessage', {
+        const messageParams: SendMessageWithStars = {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.',
             stars_amount: 1
-        });
+        };
+
+        // Используем прямой запрос к API
+        await bot.telegram.callApi('sendMessage', messageParams as any);
     } catch (error) {
         console.error('Ошибка в команде start:', error);
         await ctx.reply('Произошла ошибка. Пожалуйста, попробуйте позже.');
