@@ -16,23 +16,30 @@ bot.command('start', async (ctx) => {
     try {
         console.log('Получена команда /start от пользователя:', ctx.from?.id);
         
-        // Отправляем сообщение со специальной разметкой для звезд
-        await axios.post(`${TELEGRAM_API}/sendMessage`, {
+        // Используем формат данных как в aiogram
+        const messageData = {
             chat_id: ctx.chat.id,
             text: '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n\n⭐️ Нажмите на кнопку со звездочкой сверху, чтобы отправить звезду!',
-            reply_markup: {
-                stars: {
-                    settings: {
-                        min_stars: 1,
-                        max_stars: 1,
-                        price_per_star: {
-                            amount: 100,  // 1 рубль = 100 копеек
-                            currency: "RUB"
-                        }
+            params: {
+                message_thread_id: undefined,
+                parse_mode: undefined,
+                entities: undefined,
+                disable_web_page_preview: undefined,
+                disable_notification: false,
+                protect_content: undefined,
+                reply_to_message_id: undefined,
+                allow_sending_without_reply: undefined,
+                reply_markup: undefined,
+                star_params: {
+                    star_price: {
+                        amount: 100,
+                        currency: "RUB"
                     }
                 }
             }
-        });
+        };
+        
+        await axios.post(`${TELEGRAM_API}/sendMessage`, messageData);
         
         console.log('Сообщение отправлено пользователю:', ctx.from?.id);
     } catch (error) {
