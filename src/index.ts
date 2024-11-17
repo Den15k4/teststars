@@ -1,5 +1,6 @@
 import { Telegraf, Context } from 'telegraf';
 import dotenv from 'dotenv';
+import { InlineKeyboardButton } from 'telegraf/types';
 
 dotenv.config();
 
@@ -12,6 +13,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 // Обработчик команды /start
 bot.command('start', async (ctx) => {
     try {
+        // Отправляем приветственное сообщение
         await ctx.reply(
             '👋 Привет! Я тестовый бот для оплаты через Telegram Stars.\n⭐️ Нажмите кнопку, чтобы поддержать!', 
             {
@@ -34,31 +36,19 @@ bot.action('buy_stars', async (ctx) => {
     try {
         await ctx.answerCbQuery();
 
-        // Отправляем invoice для звезд
-        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerInvoice`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                chat_id: ctx.chat!.id,
-                title: "Поддержка канала",
-                description: "Поддержать канал на 20 звёзд!",
-                payload: "stars_payment",
-                currency: "XTR",
-                prices: [{
-                    label: "XTR",
-                    amount: 20
-                }],
-                provider_token: "",
-                need_shipping_address: false,
-                is_flexible: false,
-                protect_content: false
-            })
-        });
+        // Отправляем два сообщения: первое с кнопкой donate и второе с описанием
+        const keyboard = {
+            inline_keyboard: [[
+                {
+                    text: '⭐️ Поддержать звездой',
+                    url: `https://t.me/${(await bot.telegram.getMe()).username}/donate`
+                } as InlineKeyboardButton
+            ]]
+        };
 
-        const data = await response.json();
-        console.log('Ответ API:', data);
+        await ctx.reply('Поддержать канал на 20 звёзд!', {
+            reply_markup: keyboard
+        });
 
     } catch (error) {
         console.error('Ошибка при создании платежа:', error);
@@ -66,34 +56,13 @@ bot.action('buy_stars', async (ctx) => {
     }
 });
 
-// Обработчик пре-чекаута
-bot.on('pre_checkout_query', async (ctx) => {
+// Обработчик успешного платежа (для звезд это message_reaction)
+bot.on('message_reaction', (ctx) => {
     try {
-        // Всегда подтверждаем пре-чекаут
-        const response = await fetch(`https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerPreCheckoutQuery`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                pre_checkout_query_id: ctx.preCheckoutQuery?.id,
-                ok: true
-            })
-        });
-
-        const data = await response.json();
-        console.log('Ответ пре-чекаута:', data);
+        console.log('Получена реакция:', ctx.update);
+        ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
     } catch (error) {
-        console.error('Ошибка при пре-чекауте:', error);
-    }
-});
-
-// Обработчик успешного платежа
-bot.on('successful_payment', async (ctx) => {
-    try {
-        await ctx.reply('🌟 Спасибо за вашу поддержку! 🌟');
-    } catch (error) {
-        console.error('Ошибка при обработке успешного платежа:', error);
+        console.error('Ошибка при обработке реакции:', error);
     }
 });
 
