@@ -1,7 +1,7 @@
 import aiohttp
 import logging
 from typing import Dict, Any
-from ..config import config
+from src.config import config
 import time
 
 logger = logging.getLogger(__name__)

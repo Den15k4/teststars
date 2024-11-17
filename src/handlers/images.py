@@ -1,15 +1,17 @@
 import aiohttp
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from ..database.models import Database
-from ..keyboards.markups import Keyboards
-from ..services.clothoff import ClothOffAPI
-from ..config import config
+from src.database.models import Database
+from src.keyboards.markups import Keyboards
+from src.services.clothoff import ClothOffAPI
+from src.config import config
 import logging
 
 router = Router()
 clothoff_api = ClothOffAPI()
 logger = logging.getLogger(__name__)
+
+
 
 @router.callback_query(F.data == "start_processing")
 async def start_processing(callback: CallbackQuery, db: Database):

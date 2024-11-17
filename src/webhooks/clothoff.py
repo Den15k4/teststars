@@ -1,8 +1,8 @@
 from aiohttp import web
 import logging
 from typing import Dict, Any
-from ..database.models import Database
-from ..keyboards.markups import Keyboards
+from src.database.models import Database
+from src.keyboards.markups import Keyboards
 
 logger = logging.getLogger(__name__)
 

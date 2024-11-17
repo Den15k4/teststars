@@ -1,6 +1,6 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
-from ..config import config
+from src.config import config
 
 class Keyboards:
     @staticmethod
@@ -45,36 +45,11 @@ class Keyboards:
         return builder.as_markup()
 
     @staticmethod
-    def after_payment():
-        """Клавиатура после успешной оплаты"""
-        builder = InlineKeyboardBuilder()
-        builder.row(
-            InlineKeyboardButton(text="💫 Начать обработку", callback_data="start_processing"),
-            InlineKeyboardButton(text="↩️ В главное меню", callback_data="back_to_menu")
-        )
-        return builder.as_markup()
-
-    @staticmethod
-    def referral_menu(bot_username: str, user_id: int):
-        """Меню реферальной программы"""
-        referral_link = f"https://t.me/{bot_username}?start=ref{user_id}"
+    def back_keyboard():
+        """Кнопка возврата к главному меню"""
         builder = InlineKeyboardBuilder()
         builder.row(InlineKeyboardButton(
-            text="♻️ Обновить статистику",
-            callback_data="refresh_referrals"
-        ))
-        builder.row(InlineKeyboardButton(
-            text="↩️ В главное меню",
-            callback_data="back_to_menu"
-        ))
-        return builder.as_markup(), referral_link
-
-    @staticmethod
-    def back_to_menu():
-        """Кнопка возврата в главное меню"""
-        builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(
-            text="↩️ В главное меню",
+            text="↩️ Назад",
             callback_data="back_to_menu"
         ))
         return builder.as_markup()

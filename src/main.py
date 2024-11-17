@@ -7,12 +7,12 @@ from aiogram.filters import CommandStart, Command
 from aiohttp import web
 import json
 
-from config import config
-from database.models import Database
-from keyboards.markups import Keyboards
-from handlers import payments, referral, images
-from services.referral import ReferralSystem
-from webhooks.clothoff import ClothOffWebhook
+from src.config import config
+from src.database.models import Database
+from src.keyboards.markups import Keyboards
+from src.handlers import payments, referral, images
+from src.services.referral import ReferralSystem
+from src.webhooks.clothoff import ClothOffWebhook
 
 # Настройка логирования
 logging.basicConfig(
@@ -60,14 +60,6 @@ async def cmd_start(message: Message):
         "Добро пожаловать! 👋\n\n"
         "Я помогу вам раздеть любую даму!🔞\n\n"
         "Для начала работы приобретите кредиты 💸\n\n"
-        "Выберите действие:",
-        reply_markup=Keyboards.main_menu()
-    )
-
-# Обработчик кнопки "Назад"
-@dp.callback_query(lambda c: c.data == "back_to_menu")
-async def back_to_menu(callback: types.CallbackQuery):
-    await callback.message.edit_text(
         "Выберите действие:",
         reply_markup=Keyboards.main_menu()
     )

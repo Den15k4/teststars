@@ -1,6 +1,6 @@
 import logging
-from ..database.models import Database
-from typing import Optional
+from src.database.models import Database
+from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class ReferralSystem:
                 logger.error(f"Error in process_referral: {e}")
                 return "Произошла ошибка при обработке реферала"
 
-    async def process_referral_payment(self, user_id: int, amount: float) -> float:
+    async def process_referral_payment(self, user_id: int, amount: float) -> Optional[float]:
         """Обработка платежа для реферальной системы"""
         async with self.db.pool.acquire() as conn:
             try:
@@ -95,14 +95,14 @@ class ReferralSystem:
 
                     return bonus_amount
 
-                return 0
+                return None
 
             except Exception as e:
                 logger.error(f"Error in process_referral_payment: {e}")
-                return 0
+                return None
 
-    async def get_referral_stats(self, user_id: int) -> dict:
-        """Получение статистики рефералов"""
+    async def get_referral_stats(self, user_id: int) -> Dict[str, Any]:
+        """Получение статистики рефералов пользователя"""
         async with self.db.pool.acquire() as conn:
             try:
                 stats = await conn.fetchrow('''
@@ -124,3 +124,18 @@ class ReferralSystem:
                     'total_referrals': 0,
                     'referral_earnings': 0
                 }
+
+    async def get_referrer(self, user_id: int) -> Optional[int]:
+        """Получение ID реферера пользователя"""
+        async with self.db.pool.acquire() as conn:
+            try:
+                result = await conn.fetchval('''
+                    SELECT referrer_id 
+                    FROM users 
+                    WHERE user_id = $1 AND referrer_id IS NOT NULL
+                ''', user_id)
+                return result
+
+            except Exception as e:
+                logger.error(f"Error in get_referrer: {e}")
+                return None

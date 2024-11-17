@@ -1,9 +1,9 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, LabeledPrice
-from ..database.models import Database
-from ..keyboards.markups import Keyboards
-from ..config import config
-from ..services.referral import ReferralSystem
+from src.database.models import Database
+from src.keyboards.markups import Keyboards
+from src.config import config
+from src.services.referral import ReferralSystem
 
 router = Router()
 
