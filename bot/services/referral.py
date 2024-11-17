@@ -1,5 +1,5 @@
 import logging
-from src.database.models import Database
+from bot.database.models import Database
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
