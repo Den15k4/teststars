@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from aiogram import Bot, Dispatcher
+from typing import Any, Awaitable, Callable, Dict
+from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.enums import ParseMode
-from aiogram.types import Message
+from aiogram.types import Message, TelegramObject
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
@@ -21,6 +22,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Middleware для передачи db в хэндлеры
+class DatabaseMiddleware(BaseMiddleware):
+    def __init__(self, database: Database):
+        super().__init__()
+        self.database = database
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        data["db"] = self.database
+        return await handler(event, data)
+
 # Инициализация бота и диспетчера
 bot = Bot(
     token=config.BOT_TOKEN,
@@ -28,6 +44,9 @@ bot = Bot(
 )
 dp = Dispatcher()
 db = Database(config.DATABASE_URL)
+
+# Подключаем middleware
+dp.update.middleware.register(DatabaseMiddleware(db))
 
 # Подключаем роутеры
 dp.include_router(payments.router)
@@ -40,7 +59,7 @@ clothoff_webhook = ClothOffWebhook(bot, db)
 
 # Базовые хэндлеры
 @dp.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject):
+async def cmd_start(message: Message, command: CommandObject, db: Database):
     user_id = message.from_user.id
     username = message.from_user.username
 
