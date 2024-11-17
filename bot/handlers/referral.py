@@ -1,8 +1,8 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery
-from src.database.models import Database
-from src.keyboards.markups import Keyboards
-from src.services.referral import ReferralSystem
+from bot.database.models import Database
+from bot.keyboards.markups import Keyboards
+from bot.services.referral import ReferralSystem
 
 router = Router()
 
