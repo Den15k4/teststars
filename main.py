@@ -3,16 +3,15 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiohttp import web
-import json
 
-from src.config import config
-from src.database.models import Database
-from src.keyboards.markups import Keyboards
-from src.handlers import payments, referral, images
-from src.services.referral import ReferralSystem
-from src.webhooks.clothoff import ClothOffWebhook
+from bot.config import config
+from bot.database.models import Database
+from bot.keyboards.markups import Keyboards
+from bot.handlers import payments, referral, images
+from bot.services.referral import ReferralSystem
+from bot.webhooks.clothoff import ClothOffWebhook
 
 # Настройка логирования
 logging.basicConfig(

@@ -1,6 +1,6 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton
-from src.config import config
+from bot.config import config
 
 class Keyboards:
     @staticmethod

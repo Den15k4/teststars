@@ -1,9 +1,9 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, LabeledPrice
-from src.database.models import Database
-from src.keyboards.markups import Keyboards
-from src.config import config
-from src.services.referral import ReferralSystem
+from bot.database.models import Database
+from bot.keyboards.markups import Keyboards
+from bot.config import config
+from bot.services.referral import ReferralSystem
 
 router = Router()
 
@@ -42,6 +42,7 @@ async def process_buy(callback: CallbackQuery, db: Database):
             await callback.answer("Пакет не найден")
             return
 
+        # Telegram Stars payment
         await callback.message.answer_invoice(
             title=f"Покупка {package['description']}",
             description=f"Купить {package['credits']} генераций",
@@ -51,11 +52,10 @@ async def process_buy(callback: CallbackQuery, db: Database):
             prices=[
                 LabeledPrice(
                     label=package['description'],
-                    amount=package['credits']
+                    amount=package['credits']  # Количество звезд
                 )
             ]
         )
-        
         await callback.answer()
 
     except Exception as e:
@@ -65,7 +65,6 @@ async def process_buy(callback: CallbackQuery, db: Database):
 @router.message(F.successful_payment)
 async def successful_payment(message: Message, db: Database):
     try:
-        # Получаем ID пакета из payload
         package_id = int(message.successful_payment.invoice_payload.split("_")[1])
         package = next(
             (p for p in config.PACKAGES if p["id"] == package_id),
@@ -83,8 +82,8 @@ async def successful_payment(message: Message, db: Database):
                 package['price']
             )
 
-            # Отправляем уведомление о бонусе рефереру
             if bonus_amount:
+                # Уведомляем реферера о бонусе
                 referrer_id = await db.get_user_referrer(message.from_id)
                 if referrer_id:
                     await message.bot.send_message(
@@ -96,12 +95,12 @@ async def successful_payment(message: Message, db: Database):
             await message.answer(
                 f"✅ Оплата успешно получена!\n"
                 f"💫 На ваш счет зачислено {package['credits']} кредитов",
-                reply_markup=Keyboards.after_payment()
+                reply_markup=Keyboards.main_menu()
             )
 
     except Exception as e:
         print(f"Error in successful_payment: {e}")
         await message.answer(
             "Произошла ошибка при обработке платежа",
-            reply_markup=Keyboards.back_to_menu()
+            reply_markup=Keyboards.back_keyboard()
         )

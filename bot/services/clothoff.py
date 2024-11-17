@@ -1,8 +1,8 @@
 import aiohttp
 import logging
-from typing import Dict, Any
-from src.config import config
+from typing import Dict, Any, Optional
 import time
+from bot.config import config
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,32 @@ class ClothOffAPI:
             raise
 
     async def check_age(self, image_data: bytes) -> bool:
-        """Проверка возрастных ограничений
-        В реальном приложении здесь должна быть реальная проверка возраста
-        """
-        return True
+        """Проверка возрастных ограничений"""
+        try:
+            form_data = aiohttp.FormData()
+            form_data.add_field(
+                'image',
+                image_data,
+                filename='check.jpg',
+                content_type='image/jpeg'
+            )
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f'{self.base_url}/check_age',
+                    data=form_data,
+                    headers={
+                        'x-api-key': self.api_key,
+                        'accept': 'application/json'
+                    }
+                ) as response:
+                    if response.status != 200:
+                        return True  # В случае ошибки пропускаем проверку
+
+                    data = await response.json()
+                    age = data.get('age', 0)
+                    return age >= 18
+
+        except Exception as e:
+            logger.error(f"Error in check_age: {e}")
+            return True  # В случае ошибки пропускаем проверку

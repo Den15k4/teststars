@@ -9,5 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование кода
 COPY . .
 
+# Добавляем директорию в PYTHONPATH
+ENV PYTHONPATH=/app
+
 # Запуск бота
-CMD ["python", "src/main.py"]
+CMD ["python", "main.py"]

@@ -1,23 +1,21 @@
 import aiohttp
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
-from src.database.models import Database
-from src.keyboards.markups import Keyboards
-from src.services.clothoff import ClothOffAPI
-from src.config import config
+from bot.database.models import Database
+from bot.keyboards.markups import Keyboards
+from bot.services.clothoff import ClothOffAPI
+from bot.config import config
 import logging
 
 router = Router()
 clothoff_api = ClothOffAPI()
 logger = logging.getLogger(__name__)
 
-
-
 @router.callback_query(F.data == "start_processing")
 async def start_processing(callback: CallbackQuery, db: Database):
     user_id = callback.from_user.id
     
-    # Проверяем наличие кредитов
+    # Проверяем кредиты
     credits = await db.check_credits(user_id)
     if credits <= 0:
         await callback.message.edit_text(
@@ -72,7 +70,6 @@ async def handle_photo(message: Message, db: Database):
             )
             return
 
-        # Отправляем сообщение о начале обработки
         processing_msg = await message.reply("⏳ Начинаю раздевать...")
 
         # Получаем файл
@@ -97,7 +94,6 @@ async def handle_photo(message: Message, db: Database):
         await db.use_credit(user_id)
         await db.update_pending_task(user_id, result['id_gen'])
 
-        # Отправляем сообщение об успешном начале обработки
         await message.reply(
             "✅ Изображение принято в обработку:\n\n"
             f"⏱ Время в очереди: {result['queue_time']} сек\n"
@@ -130,17 +126,13 @@ async def handle_photo(message: Message, db: Database):
                 "Ваши кредиты сохранены и будут доступны позже."
             )
 
-        await message.reply(
-            error_msg,
-            reply_markup=Keyboards.main_menu()
-        )
+        await message.reply(error_msg, reply_markup=Keyboards.main_menu())
         
         # Возвращаем кредит в случае ошибки
-        if user_id:
+        if credits > 0:
             await db.return_credit(user_id)
 
     finally:
-        # Удаляем сообщение о процессе обработки
         if processing_msg:
             try:
                 await processing_msg.delete()

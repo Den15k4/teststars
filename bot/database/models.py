@@ -14,7 +14,8 @@ class Database:
         """Создание пула подключений к БД"""
         self.pool = await asyncpg.create_pool(
             self.url,
-            max_size=20
+            max_size=20,
+            ssl='require'
         )
 
     async def close(self) -> None:
@@ -118,22 +119,14 @@ class Database:
         """Очистка ID текущей задачи"""
         await self.update_pending_task(user_id, None)
 
-    async def add_payment(self, user_id: int, payment_id: str, amount: float, credits: int) -> None:
-        """Добавление записи о платеже"""
+    async def update_credits(self, user_id: int, amount: int) -> None:
+        """Обновление количества кредитов"""
         async with self.pool.acquire() as conn:
             await conn.execute('''
-                INSERT INTO payments (user_id, payment_id, amount, credits, status)
-                VALUES ($1, $2, $3, $4, 'pending')
-            ''', user_id, payment_id, amount, credits)
-
-    async def update_payment_status(self, payment_id: str, status: str) -> None:
-        """Обновление статуса платежа"""
-        async with self.pool.acquire() as conn:
-            await conn.execute('''
-                UPDATE payments 
-                SET status = $1, updated_at = CURRENT_TIMESTAMP
-                WHERE payment_id = $2
-            ''', status, payment_id)
+                UPDATE users 
+                SET credits = credits + $1 
+                WHERE user_id = $2
+            ''', amount, user_id)
 
     async def get_user_referrer(self, user_id: int) -> Optional[int]:
         """Получение ID реферера пользователя"""
