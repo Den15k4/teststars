@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.types import Message
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
 
@@ -40,7 +40,7 @@ clothoff_webhook = ClothOffWebhook(bot, db)
 
 # Базовые хэндлеры
 @dp.message(CommandStart())
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, command: CommandObject):
     user_id = message.from_user.id
     username = message.from_user.username
 
@@ -48,8 +48,8 @@ async def cmd_start(message: Message):
     await db.add_user(user_id, username)
 
     # Обрабатываем реферальный параметр
-    args = message.get_args()
-    if args.startswith('ref'):
+    args = command.args
+    if args and args.startswith('ref'):
         try:
             referrer_id = int(args[3:])
             referral_system = ReferralSystem(db)
