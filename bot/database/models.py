@@ -1,7 +1,7 @@
 import asyncpg
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -44,48 +44,103 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_last_used ON users(last_used);
             ''')
 
-    async def cleanup_stale_tasks(self, timeout_minutes: int = 30) -> list:
+    async def cleanup_stale_tasks(self, timeout_minutes: int = 30) -> List[Dict]:
         """Очистка зависших задач старше timeout_minutes минут"""
         if not self.pool:
             return []
             
         async with self.pool.acquire() as conn:
             try:
-                stale_tasks = await conn.fetch(f'''
-                    UPDATE users 
-                    SET credits = credits + 1,
-                        pending_task_id = NULL,
-                        last_used = NULL
+                # Находим все зависшие задачи
+                stale_tasks = await conn.fetch('''
+                    SELECT 
+                        user_id, 
+                        pending_task_id,
+                        last_used,
+                        EXTRACT(EPOCH FROM (NOW() - last_used)) as age_seconds
+                    FROM users 
                     WHERE pending_task_id IS NOT NULL 
-                    AND last_used < NOW() - INTERVAL '{timeout_minutes} minutes'
-                    RETURNING user_id, pending_task_id, last_used
-                ''')
+                    AND last_used < NOW() - INTERVAL $1
+                ''', f'{timeout_minutes} minutes')
+
+                if stale_tasks:
+                    # Очищаем найденные задачи
+                    task_ids = [task['pending_task_id'] for task in stale_tasks]
+                    user_ids = [task['user_id'] for task in stale_tasks]
+                    
+                    await conn.execute('''
+                        UPDATE users 
+                        SET credits = credits + 1,
+                            pending_task_id = NULL,
+                            last_used = NULL
+                        WHERE user_id = ANY($1)
+                    ''', user_ids)
+
+                    logger.info(f"Очищено {len(stale_tasks)} зависших задач: {task_ids}")
+                    return [dict(task) for task in stale_tasks]
                 
-                logger.info(f"Найдено {len(stale_tasks)} зависших задач для очистки")
-                return stale_tasks
-                
+                return []
+
             except Exception as e:
                 logger.error(f"Ошибка при очистке зависших задач: {e}")
                 return []
 
+    async def force_cleanup_task(self, user_id: int) -> bool:
+        """Принудительная очистка задачи пользователя"""
+        if not self.pool:
+            return False
+            
+        async with self.pool.acquire() as conn:
+            try:
+                result = await conn.fetchrow('''
+                    UPDATE users 
+                    SET credits = credits + 1,
+                        pending_task_id = NULL,
+                        last_used = NULL
+                    WHERE user_id = $1 
+                    AND pending_task_id IS NOT NULL
+                    RETURNING pending_task_id
+                ''', user_id)
+                
+                if result:
+                    logger.info(f"Принудительно очищена задача {result['pending_task_id']} пользователя {user_id}")
+                    return True
+                return False
+
+            except Exception as e:
+                logger.error(f"Ошибка при принудительной очистке задачи: {e}")
+                return False
+
     async def check_active_task(self, user_id: int) -> Tuple[bool, Optional[str], Optional[float]]:
         """Проверка активной задачи с учетом таймаута"""
         async with self.pool.acquire() as conn:
-            result = await conn.fetchrow('''
-                SELECT pending_task_id, last_used,
-                    EXTRACT(EPOCH FROM (NOW() - last_used)) as age_seconds
-                FROM users 
-                WHERE user_id = $1 AND pending_task_id IS NOT NULL
-            ''', user_id)
+            try:
+                result = await conn.fetchrow('''
+                    SELECT 
+                        pending_task_id,
+                        last_used,
+                        EXTRACT(EPOCH FROM (NOW() - last_used)) as age_seconds
+                    FROM users 
+                    WHERE user_id = $1 
+                    AND pending_task_id IS NOT NULL
+                ''', user_id)
 
-            if not result:
+                if not result:
+                    return False, None, None
+
+                age_seconds = result['age_seconds'] if result['age_seconds'] else 0
+
+                # Если задача старше 30 минут
+                if age_seconds > 1800:  # 30 minutes
+                    # Очищаем эту конкретную задачу
+                    await self.force_cleanup_task(user_id)
+                    return False, None, None
+
+                return True, result['pending_task_id'], age_seconds
+
+            except Exception as e:
+                logger.error(f"Ошибка при проверке активной задачи: {e}")
                 return False, None, None
-
-            if result['age_seconds'] and result['age_seconds'] > 1800:  # 30 минут
-                await self.cleanup_stale_tasks()
-                return False, None, None
-
-            return True, result['pending_task_id'], result['age_seconds']
 
     async def add_user(self, user_id: int, username: str = None) -> None:
         """Добавление нового пользователя"""
@@ -93,7 +148,8 @@ class Database:
             await conn.execute('''
                 INSERT INTO users (user_id, username, credits) 
                 VALUES ($1, $2, 0) 
-                ON CONFLICT (user_id) DO NOTHING
+                ON CONFLICT (user_id) DO UPDATE 
+                SET username = EXCLUDED.username
             ''', user_id, username or 'anonymous')
 
     async def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
@@ -153,7 +209,7 @@ class Database:
                 SET credits = credits + $1 
                 WHERE user_id = $2
             ''', amount, user_id)
-            
+
     async def get_user_referrer(self, user_id: int) -> Optional[int]:
         """Получение ID реферера пользователя"""
         async with self.pool.acquire() as conn:
