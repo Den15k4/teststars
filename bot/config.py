@@ -10,7 +10,7 @@ class Config:
     BOT_TOKEN: str = getenv('BOT_TOKEN', '')
     DATABASE_URL: str = getenv('DATABASE_URL', '')
     CLOTHOFF_API_KEY: str = getenv('CLOTHOFF_API_KEY', '')
-    WEBHOOK_URL: str = getenv('WEBHOOK_URL', '')
+    WEBHOOK_URL: str = getenv('WEBHOOK_URL', 'https://teststars-production.up.railway.app')  # Дефолтное значение
     CHANNEL_ID: str = getenv('CHANNEL_ID', '')
 
     # Формируем полный URL для webhook'а ClothOff
@@ -51,15 +51,20 @@ class Config:
     CLOTHOFF_API_URL: str = 'https://public-api.clothoff.net'
 
     def __post_init__(self):
-        if not all([self.BOT_TOKEN, self.DATABASE_URL, self.CLOTHOFF_API_KEY, self.WEBHOOK_URL]):
-            missing = [
-                name for name, value in {
-                    'BOT_TOKEN': self.BOT_TOKEN,
-                    'DATABASE_URL': self.DATABASE_URL,
-                    'CLOTHOFF_API_KEY': self.CLOTHOFF_API_KEY,
-                    'WEBHOOK_URL': self.WEBHOOK_URL
-                }.items() if not value
-            ]
+        # Проверяем только критически важные переменные
+        required_vars = {
+            'BOT_TOKEN': self.BOT_TOKEN,
+            'DATABASE_URL': self.DATABASE_URL,
+            'CLOTHOFF_API_KEY': self.CLOTHOFF_API_KEY
+        }
+        
+        missing = [name for name, value in required_vars.items() if not value]
+        
+        if missing:
             raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+        # Логируем значения переменных окружения (без секретов)
+        print(f"Loaded config with WEBHOOK_URL: {self.WEBHOOK_URL}")
+        print(f"ClothOff webhook URL: {self.clothoff_webhook_url}")
 
 config = Config()
