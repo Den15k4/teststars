@@ -24,7 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Middleware для передачи db в хэндлеры
 class DatabaseMiddleware(BaseMiddleware):
     def __init__(self, database: Database):
         super().__init__()
@@ -39,7 +38,6 @@ class DatabaseMiddleware(BaseMiddleware):
         data["db"] = self.database
         return await handler(event, data)
 
-# Инициализация бота и диспетчера
 bot = Bot(
     token=config.BOT_TOKEN,
     default=DefaultBotProperties(parse_mode=ParseMode.HTML)
@@ -47,74 +45,94 @@ bot = Bot(
 dp = Dispatcher()
 db = Database(config.DATABASE_URL)
 
-# Подключаем middleware
 dp.update.middleware.register(DatabaseMiddleware(db))
 
-# Подключаем роутеры в правильном порядке
-dp.include_router(main_handlers.router)  # Общие обработчики должны быть первыми
+dp.include_router(main_handlers.router)
 dp.include_router(payments.router)
 dp.include_router(referral.router)
 dp.include_router(images.router)
 
-# Создаём приложение для вебхуков
-app = web.Application(client_max_size=50 * 1024 * 1024)  # 50 MB
+app = web.Application(client_max_size=50 * 1024 * 1024)
 clothoff_webhook = ClothOffWebhook(bot, db)
 
-# Базовые хэндлеры
-@dp.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject, db: Database):
-    user_id = message.from_user.id
-    username = message.from_user.username
-
-    # Добавляем пользователя в БД
-    await db.add_user(user_id, username)
-
-    # Обрабатываем реферальный параметр
-    args = command.args
-    if args and args.startswith('ref'):
-        try:
-            referrer_id = int(args[3:])
-            referral_system = ReferralSystem(db)
-            error = await referral_system.process_referral(user_id, referrer_id)
-            if not error:
-                await message.answer("🎉 Вы успешно присоединились по реферальной ссылке!")
-        except ValueError:
-            pass
-
-    await message.answer(
-        "Добро пожаловать! 👋\n\n"
-        "Я помогу вам раздеть любую даму!🔞\n\n"
-        "Для начала работы приобретите кредиты 💸\n\n"
-        "Выберите действие:",
-        reply_markup=Keyboards.main_menu()
-    )
+async def initial_cleanup():
+    """Начальная очистка всех зависших задач при старте бота"""
+    try:
+        async with db.pool.acquire() as conn:
+            # Получаем все зависшие задачи для логирования
+            stale_tasks = await conn.fetch('''
+                SELECT user_id, pending_task_id, last_used
+                FROM users 
+                WHERE pending_task_id IS NOT NULL
+            ''')
+            
+            if stale_tasks:
+                logger.info(f"Found {len(stale_tasks)} stale tasks at startup")
+                
+                # Очищаем все задачи и возвращаем кредиты
+                await conn.execute('''
+                    UPDATE users 
+                    SET credits = credits + 1,
+                        pending_task_id = NULL,
+                        last_used = NULL
+                    WHERE pending_task_id IS NOT NULL
+                ''')
+                
+                # Уведомляем пользователей
+                for task in stale_tasks:
+                    try:
+                        await bot.send_message(
+                            task['user_id'],
+                            "⚠️ Бот был перезапущен, ваша предыдущая задача была отменена.\n"
+                            "💫 Кредит возвращен на ваш баланс.\n"
+                            "Вы можете начать новую обработку.",
+                            reply_markup=Keyboards.main_menu()
+                        )
+                    except Exception as e:
+                        logger.error(f"Error notifying user {task['user_id']} about cleanup: {e}")
+            
+            logger.info("Initial cleanup completed")
+    except Exception as e:
+        logger.error(f"Error in initial cleanup: {e}")
 
 async def cleanup_tasks():
     """Периодическая очистка зависших задач"""
     while True:
         try:
-            # Получаем список очищенных задач
-            stale_tasks = await db.cleanup_stale_tasks(timeout_minutes=30)
-            
-            # Уведомляем пользователей
-            for task in stale_tasks:
-                try:
-                    minutes_passed = int(task['age_seconds'] / 60) if task['age_seconds'] else 30
-                    
-                    await bot.send_message(
-                        task['user_id'],
-                        f"⚠️ Ваша предыдущая задача была отменена, так как прошло {minutes_passed} минут.\n"
-                        "💫 Кредит возвращен на ваш баланс.\n"
-                        "Вы можете начать новую обработку.",
-                        reply_markup=Keyboards.main_menu()
+            async with db.pool.acquire() as conn:
+                # Находим и очищаем зависшие задачи старше 30 минут
+                stale_tasks = await conn.fetch('''
+                    WITH stale AS (
+                        UPDATE users 
+                        SET credits = credits + 1,
+                            pending_task_id = NULL,
+                            last_used = NULL
+                        WHERE pending_task_id IS NOT NULL 
+                        AND last_used < NOW() - INTERVAL '30 minutes'
+                        RETURNING user_id, pending_task_id, last_used
                     )
-                except Exception as e:
-                    logger.error(f"Error notifying user {task['user_id']} about stale task: {e}")
+                    SELECT * FROM stale
+                ''')
+                
+                if stale_tasks:
+                    logger.info(f"Cleaning up {len(stale_tasks)} stale tasks")
+                    for task in stale_tasks:
+                        try:
+                            await bot.send_message(
+                                task['user_id'],
+                                "⚠️ Ваша предыдущая задача была отменена из-за превышения времени ожидания.\n"
+                                "💫 Кредит возвращен на ваш баланс.\n"
+                                "Вы можете начать новую обработку.",
+                                reply_markup=Keyboards.main_menu()
+                            )
+                        except Exception as e:
+                            logger.error(f"Error notifying user {task['user_id']}: {e}")
             
             await asyncio.sleep(60)  # Проверяем каждую минуту
+            
         except Exception as e:
             logger.error(f"Error in cleanup task: {e}")
-            await asyncio.sleep(60)  # В случае ошибки ждем минуту
+            await asyncio.sleep(60)
 
 async def run_webhook_server():
     """Запуск вебхук сервера"""
@@ -128,17 +146,17 @@ async def run_webhook_server():
 app.router.add_post('/clothoff/webhook', clothoff_webhook.handle_webhook)
 app.router.add_get('/health', lambda _: web.Response(text='OK'))
 
-# Функция запуска бота
 async def main():
     try:
-        # Подключаемся к БД
         await db.connect()
         await db.init_db()
         
-        # Запускаем вебхук сервер
+        # Выполняем начальную очистку
+        await initial_cleanup()
+        
         await run_webhook_server()
         
-        # Запускаем очистку зависших задач
+        # Запускаем периодическую очистку
         asyncio.create_task(cleanup_tasks())
         
         logger.info("Запуск бота...")
