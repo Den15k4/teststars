@@ -16,6 +16,11 @@ class ClothOffAPI:
     async def process_image(self, image_data: bytes, user_id: int) -> Dict[str, Any]:
         """Отправка изображения на обработку"""
         try:
+            id_gen = f"user_{user_id}_{int(time.time())}"
+            
+            # Добавляем id_gen в webhook URL
+            webhook_url = f"{self.webhook_url}?id_gen={id_gen}"
+            
             # Формируем данные для отправки
             form_data = aiohttp.FormData()
             form_data.add_field('cloth', 'naked')
@@ -25,12 +30,10 @@ class ClothOffAPI:
                 filename='image.jpg',
                 content_type='image/jpeg'
             )
-            
-            id_gen = f"user_{user_id}_{int(time.time())}"
             form_data.add_field('id_gen', id_gen)
-            form_data.add_field('webhook', self.webhook_url)
+            form_data.add_field('webhook', webhook_url)
 
-            logger.info(f"Sending request to ClothOff API with webhook: {self.webhook_url}")
+            logger.info(f"Sending request to ClothOff API with webhook: {webhook_url}")
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -60,7 +63,3 @@ class ClothOffAPI:
         except Exception as e:
             logger.error(f"Error in process_image: {e}")
             raise
-
-    async def check_age(self, image_data: bytes) -> bool:
-        """Проверка возрастных ограничений"""
-        return True  # Для тестирования пропускаем проверку возраста
