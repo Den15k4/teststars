@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Dict
 from aiogram import Bot, Dispatcher, BaseMiddleware
 from aiogram.enums import ParseMode
@@ -89,6 +90,32 @@ async def cmd_start(message: Message, command: CommandObject, db: Database):
     )
 
 async def cleanup_tasks():
+    """Периодическая очистка зависших задач"""
+    while True:
+        try:
+            # Получаем список очищенных задач
+            stale_tasks = await db.cleanup_stale_tasks()
+            
+            # Уведомляем пользователей
+            for task in stale_tasks:
+                try:
+                    time_passed = datetime.now(task['last_used'].tzinfo) - task['last_used']
+                    minutes_passed = int(time_passed.total_seconds() / 60)
+                    
+                    await bot.send_message(
+                        task['user_id'],
+                        f"⚠️ Ваша предыдущая задача была отменена, так как прошло {minutes_passed} минут.\n"
+                        "💫 Кредит возвращен на ваш баланс.\n"
+                        "Вы можете начать новую обработку.",
+                        reply_markup=Keyboards.main_menu()
+                    )
+                except Exception as e:
+                    logger.error(f"Error notifying user {task['user_id']} about stale task: {e}")
+            
+            await asyncio.sleep(300)  # Проверяем каждые 5 минут
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
+            await asyncio.sleep(60)  # В случае ошибки ждем минуту
     """Периодическая очистка зависших задач"""
     while True:
         try:
