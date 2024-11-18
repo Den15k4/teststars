@@ -54,21 +54,20 @@ dp.include_router(payments.router)
 dp.include_router(referral.router)
 dp.include_router(images.router)
 
-# Создаём приложение для вебхуков
-app = web.Application()
+# Создаём приложение для вебхуков с увеличенным максимальным размером тела запроса
+app = web.Application(client_max_size=50 * 1024 * 1024)  # 50 MB
 clothoff_webhook = ClothOffWebhook(bot, db)
 
 # Маршруты
-async def handle_webhook(request: web.Request) -> web.Response:
-    """Обработчик webhook для Telegram"""
+@web.middleware
+async def error_middleware(request: web.Request, handler):
     try:
-        data = await request.json()
-        logger.info(f"Received webhook: {data}")
-        await clothoff_webhook.handle_webhook(request)
-        return web.Response(text='OK')
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        return web.Response(status=500, text=str(e))
+        return await handler(request)
+    except Exception as ex:
+        logger.error(f"Error in middleware: {ex}", exc_info=True)
+        return web.Response(status=500, text=str(ex))
+
+app.middlewares.append(error_middleware)
 
 # Обработчик проверки состояния
 async def health_check(request: web.Request) -> web.Response:
