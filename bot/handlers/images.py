@@ -83,6 +83,114 @@ async def handle_photo(message: Message, db: Database):
             return
 
         # Проверяем активные задачи
+        has_active_task, task_id, age_seconds = await db.check_active_task(user_id)
+        
+        if has_active_task:
+            minutes_left = 30 - int(age_seconds / 60)
+            await message.reply(
+                "⚠️ У вас уже есть активная задача в обработке.\n"
+                f"Пожалуйста, дождитесь её завершения или попробуйте через {minutes_left} минут.",
+                reply_markup=Keyboards.main_menu()
+            )
+            return
+
+        # Отправляем сообщение о начале обработки
+        processing_msg = await message.reply("⏳ Начинаю раздевать...")
+
+        # Получаем файл
+        photo = message.photo[-1]
+        file = await message.bot.get_file(photo.file_id)
+        
+        # Скачиваем изображение
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f'https://api.telegram.org/file/bot{config.BOT_TOKEN}/{file.file_path}'
+            ) as response:
+                image_data = await response.read()
+
+        # Проверяем возраст
+        if not await clothoff_api.check_age(image_data):
+            raise ValueError("AGE_RESTRICTION")
+
+        # Перед отправкой на обработку еще раз проверяем активные задачи
+        has_active_task, _, _ = await db.check_active_task(user_id)
+        if has_active_task:
+            raise ValueError("ACTIVE_TASK_EXISTS")
+
+        # Отправляем на обработку
+        result = await clothoff_api.process_image(image_data, user_id)
+
+        # Списываем кредит и обновляем задачу
+        await db.use_credit(user_id)
+        await db.update_pending_task(user_id, result['id_gen'])
+
+        await message.reply(
+            "✅ Изображение принято в обработку:\n\n"
+            f"⏱ Время в очереди: {result['queue_time']} сек\n"
+            f"📊 Позиция в очереди: {result['queue_num']}\n"
+            f"🔄 ID задачи: {result['id_gen']}\n\n"
+            "🔍 Результат будет отправлен, когда обработка завершится.\n"
+            "⏳ Если результат не придет в течение 30 минут, задача будет отменена автоматически.",
+            reply_markup=Keyboards.main_menu()
+        )
+
+    except ValueError as e:
+        error_msg = str(e)
+        if error_msg == "AGE_RESTRICTION":
+            await message.reply(
+                "🔞 Обработка запрещена:\n\n"
+                "Изображение не прошло проверку возрастных ограничений. "
+                "Пожалуйста, убедитесь, что на фото только люди старше 18 лет.",
+                reply_markup=Keyboards.main_menu()
+            )
+        elif error_msg == "ACTIVE_TASK_EXISTS":
+            await message.reply(
+                "⚠️ У вас уже есть активная задача в обработке.\n"
+                "Пожалуйста, дождитесь её завершения.",
+                reply_markup=Keyboards.main_menu()
+            )
+        else:
+            raise
+
+    except Exception as e:
+        logger.error(f"Error processing image: {e}")
+        error_msg = "❌ Произошла ошибка при обработке изображения."
+        
+        if 'INSUFFICIENT_BALANCE' in str(e):
+            error_msg = (
+                "⚠️ Сервис временно недоступен\n\n"
+                "К сожалению, у сервиса закончился баланс API. "
+                "Пожалуйста, попробуйте позже или свяжитесь с администратором бота.\n\n"
+                "Ваши кредиты сохранены и будут доступны позже."
+            )
+
+        await message.reply(error_msg, reply_markup=Keyboards.main_menu())
+        
+        # Возвращаем кредит в случае ошибки
+        if credits > 0:
+            await db.return_credit(user_id)
+
+    finally:
+        if processing_msg:
+            try:
+                await processing_msg.delete()
+            except Exception as e:
+                logger.error(f"Error deleting processing message: {e}")
+    user_id = message.from_user.id
+    processing_msg = None
+
+    try:
+        # Проверяем кредиты
+        credits = await db.check_credits(user_id)
+        if credits <= 0:
+            await message.reply(
+                "❌ У вас нет кредитов\n\n"
+                "Пожалуйста, пополните баланс для начала работы.",
+                reply_markup=Keyboards.payment_menu()
+            )
+            return
+
+        # Проверяем активные задачи
         has_active_task, task_id = await db.check_active_task(user_id)
         if has_active_task:
             await message.reply(
