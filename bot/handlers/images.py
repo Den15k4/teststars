@@ -109,12 +109,13 @@ async def handle_photo(message: Message, db: Database):
             ) as response:
                 image_data = await response.read()
 
-        # Проверяем возраст
-        if not await clothoff_api.check_age(image_data):
-            raise ValueError("AGE_RESTRICTION")
+        # Проверяем изображение
+        is_valid, error_msg = await clothoff_api.verify_image(image_data)
+        if not is_valid:
+            raise ValueError(error_msg)
 
         # Перед отправкой на обработку еще раз проверяем активные задачи
-        has_active_task, task_id, _ = await db.check_active_task(user_id)
+        has_active_task, _, _ = await db.check_active_task(user_id)
         if has_active_task:
             raise ValueError("ACTIVE_TASK_EXISTS")
 
@@ -137,21 +138,17 @@ async def handle_photo(message: Message, db: Database):
 
     except ValueError as e:
         error_msg = str(e)
-        if error_msg == "AGE_RESTRICTION":
-            await message.reply(
-                "🔞 Обработка запрещена:\n\n"
-                "Изображение не прошло проверку возрастных ограничений. "
-                "Пожалуйста, убедитесь, что на фото только люди старше 18 лет.",
-                reply_markup=Keyboards.main_menu()
-            )
-        elif error_msg == "ACTIVE_TASK_EXISTS":
+        if error_msg == "ACTIVE_TASK_EXISTS":
             await message.reply(
                 "⚠️ У вас уже есть активная задача в обработке.\n"
                 "Пожалуйста, дождитесь её завершения.",
                 reply_markup=Keyboards.main_menu()
             )
         else:
-            raise
+            await message.reply(
+                f"❌ {error_msg}",
+                reply_markup=Keyboards.main_menu()
+            )
 
     except Exception as e:
         logger.error(f"Error processing image: {e}")
