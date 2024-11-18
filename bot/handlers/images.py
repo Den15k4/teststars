@@ -1,6 +1,7 @@
 import aiohttp
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
 from bot.database.models import Database
 from bot.keyboards.markups import Keyboards
 from bot.services.clothoff import ClothOffAPI
@@ -13,36 +14,57 @@ logger = logging.getLogger(__name__)
 
 @router.callback_query(F.data == "start_processing")
 async def start_processing(callback: CallbackQuery, db: Database):
-    user_id = callback.from_user.id
-    
-    # Проверяем кредиты
-    credits = await db.check_credits(user_id)
-    if credits <= 0:
-        await callback.message.edit_text(
-            "❌ У вас нет кредитов\n\n"
-            "Пожалуйста, пополните баланс для начала работы.",
-            reply_markup=Keyboards.payment_menu()
-        )
-        return
+    try:
+        user_id = callback.from_user.id
+        
+        # Проверяем кредиты
+        credits = await db.check_credits(user_id)
+        if credits <= 0:
+            await callback.answer("У вас недостаточно кредитов!")
+            try:
+                await callback.message.edit_text(
+                    "❌ У вас нет кредитов\n\n"
+                    "Пожалуйста, пополните баланс для начала работы.",
+                    reply_markup=Keyboards.payment_menu()
+                )
+            except TelegramBadRequest as e:
+                if "message is not modified" not in str(e):
+                    raise
+            return
 
-    # Проверяем активные задачи
-    user = await db.get_user(user_id)
-    if user.get('pending_task_id'):
-        await callback.message.edit_text(
-            "⚠️ У вас уже есть активная задача в обработке.\n"
-            "Пожалуйста, дождитесь её завершения.",
-            reply_markup=Keyboards.main_menu()
-        )
-        return
+        # Проверяем активные задачи
+        user = await db.get_user(user_id)
+        if user.get('pending_task_id'):
+            await callback.answer("У вас уже есть активная задача!")
+            try:
+                await callback.message.edit_text(
+                    "⚠️ У вас уже есть активная задача в обработке.\n"
+                    "Пожалуйста, дождитесь её завершения.",
+                    reply_markup=Keyboards.main_menu()
+                )
+            except TelegramBadRequest as e:
+                if "message is not modified" not in str(e):
+                    raise
+            return
 
-    await callback.message.edit_text(
-        "📸 Отправьте мне фотографию для обработки\n\n"
-        "⚠️ Важные правила:\n"
-        "1. Изображение должно содержать только людей старше 18 лет\n"
-        "2. Убедитесь, что на фото чётко все детали, которые вы хотите видеть\n"
-        "3. Изображение должно быть хорошего качества",
-        reply_markup=Keyboards.processing_cancel()
-    )
+        try:
+            await callback.message.edit_text(
+                "📸 Отправьте мне фотографию для обработки\n\n"
+                "⚠️ Важные правила:\n"
+                "1. Изображение должно содержать только людей старше 18 лет\n"
+                "2. Убедитесь, что на фото чётко все детали, которые вы хотите видеть\n"
+                "3. Изображение должно быть хорошего качества",
+                reply_markup=Keyboards.processing_cancel()
+            )
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
+
+        await callback.answer()
+
+    except Exception as e:
+        logger.error(f"Error in start_processing: {e}")
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
 
 @router.message(F.photo)
 async def handle_photo(message: Message, db: Database):
@@ -70,6 +92,7 @@ async def handle_photo(message: Message, db: Database):
             )
             return
 
+        # Отправляем сообщение о начале обработки
         processing_msg = await message.reply("⏳ Начинаю раздевать...")
 
         # Получаем файл
@@ -104,7 +127,8 @@ async def handle_photo(message: Message, db: Database):
         )
 
     except ValueError as e:
-        if str(e) == "AGE_RESTRICTION":
+        error_msg = str(e)
+        if error_msg == "AGE_RESTRICTION":
             await message.reply(
                 "🔞 Обработка запрещена:\n\n"
                 "Изображение не прошло проверку возрастных ограничений. "
