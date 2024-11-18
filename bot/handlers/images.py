@@ -32,14 +32,14 @@ async def start_processing(callback: CallbackQuery, db: Database):
                     raise
             return
 
-        # Проверяем активные задачи
-        user = await db.get_user(user_id)
-        if user.get('pending_task_id'):
+        # Проверяем активные задачи с учетом таймаута
+        has_active_task, task_id = await db.check_active_task(user_id)
+        if has_active_task:
             await callback.answer("У вас уже есть активная задача!")
             try:
                 await callback.message.edit_text(
                     "⚠️ У вас уже есть активная задача в обработке.\n"
-                    "Пожалуйста, дождитесь её завершения.",
+                    "Пожалуйста, дождитесь её завершения или попробуйте через 30 минут.",
                     reply_markup=Keyboards.main_menu()
                 )
             except TelegramBadRequest as e:
@@ -83,11 +83,11 @@ async def handle_photo(message: Message, db: Database):
             return
 
         # Проверяем активные задачи
-        user = await db.get_user(user_id)
-        if user.get('pending_task_id'):
+        has_active_task, task_id = await db.check_active_task(user_id)
+        if has_active_task:
             await message.reply(
                 "⚠️ У вас уже есть активная задача в обработке.\n"
-                "Пожалуйста, дождитесь её завершения.",
+                "Пожалуйста, дождитесь её завершения или попробуйте через 30 минут.",
                 reply_markup=Keyboards.main_menu()
             )
             return

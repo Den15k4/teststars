@@ -12,7 +12,7 @@ import json
 from bot.config import config
 from bot.database.models import Database
 from bot.keyboards.markups import Keyboards
-from bot.handlers import payments, referral, images
+from bot.handlers import payments, referral, images, main_handlers
 from bot.services.referral import ReferralSystem
 from bot.webhooks.clothoff import ClothOffWebhook
 
@@ -49,33 +49,15 @@ db = Database(config.DATABASE_URL)
 # Подключаем middleware
 dp.update.middleware.register(DatabaseMiddleware(db))
 
-# Подключаем роутеры
+# Подключаем роутеры в правильном порядке
+dp.include_router(main_handlers.router)  # Общие обработчики должны быть первыми
 dp.include_router(payments.router)
 dp.include_router(referral.router)
 dp.include_router(images.router)
 
-# Создаём приложение для вебхуков с увеличенным максимальным размером тела запроса
+# Создаём приложение для вебхуков
 app = web.Application(client_max_size=50 * 1024 * 1024)  # 50 MB
 clothoff_webhook = ClothOffWebhook(bot, db)
-
-# Маршруты
-@web.middleware
-async def error_middleware(request: web.Request, handler):
-    try:
-        return await handler(request)
-    except Exception as ex:
-        logger.error(f"Error in middleware: {ex}", exc_info=True)
-        return web.Response(status=500, text=str(ex))
-
-app.middlewares.append(error_middleware)
-
-# Обработчик проверки состояния
-async def health_check(request: web.Request) -> web.Response:
-    return web.Response(text='OK')
-
-# Добавляем роуты
-app.router.add_post('/clothoff/webhook', clothoff_webhook.handle_webhook)
-app.router.add_get('/health', health_check)
 
 # Базовые хэндлеры
 @dp.message(CommandStart())
@@ -106,24 +88,42 @@ async def cmd_start(message: Message, command: CommandObject, db: Database):
         reply_markup=Keyboards.main_menu()
     )
 
+async def cleanup_tasks():
+    """Периодическая очистка зависших задач"""
+    while True:
+        try:
+            await db.cleanup_stale_tasks()
+            await asyncio.sleep(300)  # Проверяем каждые 5 минут
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
+            await asyncio.sleep(60)  # В случае ошибки ждем минуту
+
 async def run_webhook_server():
+    """Запуск вебхук сервера"""
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
     logger.info(f"Started webhook server at port 8080")
 
+# Маршруты
+app.router.add_post('/clothoff/webhook', clothoff_webhook.handle_webhook)
+app.router.add_get('/health', lambda _: web.Response(text='OK'))
+
 # Функция запуска бота
 async def main():
-    # Подключаемся к БД
-    await db.connect()
-    await db.init_db()
-    
-    # Запускаем вебхук сервер
-    await run_webhook_server()
-    
-    logger.info("Запуск бота...")
     try:
+        # Подключаемся к БД
+        await db.connect()
+        await db.init_db()
+        
+        # Запускаем вебхук сервер
+        await run_webhook_server()
+        
+        # Запускаем очистку зависших задач
+        asyncio.create_task(cleanup_tasks())
+        
+        logger.info("Запуск бота...")
         await dp.start_polling(bot)
     finally:
         await db.close()

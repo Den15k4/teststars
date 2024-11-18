@@ -1,33 +1,45 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message, LabeledPrice
+from aiogram.exceptions import TelegramBadRequest
 from bot.database.models import Database
 from bot.keyboards.markups import Keyboards
 from bot.config import config
 from bot.services.referral import ReferralSystem
+import logging
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 @router.callback_query(F.data == "buy_credits")
 async def show_payment_options(callback: CallbackQuery):
-    await callback.message.edit_text(
-        "💫 Выберите количество генераций:\n\n"
-        "ℹ️ Чем больше пакет, тем выгоднее цена за генерацию!\n\n"
-        "💳 После выбора пакета откроется оплата звёздами",
-        reply_markup=Keyboards.payment_menu()
-    )
-    await callback.answer()
+    try:
+        await callback.answer()
+        await callback.message.edit_text(
+            "💫 Выберите количество генераций:\n\n"
+            "ℹ️ Чем больше пакет, тем выгоднее цена за генерацию!\n\n"
+            "💳 После выбора пакета откроется оплата звёздами",
+            reply_markup=Keyboards.payment_menu()
+        )
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e):
+            logger.error(f"Error in show_payment_options: {e}")
+    except Exception as e:
+        logger.error(f"Error in show_payment_options: {e}")
+        await callback.answer("Произошла ошибка, попробуйте позже", show_alert=True)
 
 @router.callback_query(F.data == "check_balance")
 async def check_balance(callback: CallbackQuery, db: Database):
-    user_id = callback.from_user.id
-    credits = await db.check_credits(user_id)
-    
-    await callback.message.edit_text(
-        f"💰 Ваш текущий баланс: {credits} кредитов\n\n"
-        "1 кредит = 1 обработка изображения",
-        reply_markup=Keyboards.payment_menu()
-    )
-    await callback.answer()
+    try:
+        credits = await db.check_credits(callback.from_user.id)
+        await callback.message.edit_text(
+            f"💰 Ваш текущий баланс: {credits} кредитов\n\n"
+            "1 кредит = 1 обработка изображения",
+            reply_markup=Keyboards.payment_menu()
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Error in check_balance: {e}")
+        await callback.answer("Произошла ошибка при проверке баланса", show_alert=True)
 
 @router.callback_query(F.data.matches(r"buy_\d+_stars"))
 async def process_buy(callback: CallbackQuery, db: Database):
@@ -39,13 +51,13 @@ async def process_buy(callback: CallbackQuery, db: Database):
         )
         
         if not package:
-            await callback.answer("Пакет не найден")
+            await callback.answer("Пакет не найден", show_alert=True)
             return
 
-        # Telegram Stars payment
+        # Отправляем сообщение о покупке без provider_token для Telegram Stars
         await callback.message.answer_invoice(
-            title=f"Покупка {package['description']}",
-            description=f"Купить {package['credits']} генераций",
+            title=f"Покупка {package['credits']} генераций",
+            description=f"{package['description']}\n\nПосле оплаты кредиты будут начислены автоматически",
             payload=f"credits_{package_id}",
             provider_token="",  # Для звезд оставляем пустым
             currency="XTR",
@@ -54,17 +66,22 @@ async def process_buy(callback: CallbackQuery, db: Database):
                     label=package['description'],
                     amount=package['credits']  # Количество звезд
                 )
-            ]
+            ],
+            protect_content=False
         )
         await callback.answer()
 
     except Exception as e:
-        print(f"Error in process_buy: {e}")
-        await callback.answer("Произошла ошибка при создании платежа")
+        logger.error(f"Error in process_buy: {e}")
+        await callback.answer(
+            "Произошла ошибка при создании платежа. Попробуйте позже.",
+            show_alert=True
+        )
 
 @router.message(F.successful_payment)
 async def successful_payment(message: Message, db: Database):
     try:
+        # Получаем ID пакета из payload
         package_id = int(message.successful_payment.invoice_payload.split("_")[1])
         package = next(
             (p for p in config.PACKAGES if p["id"] == package_id),
@@ -82,8 +99,8 @@ async def successful_payment(message: Message, db: Database):
                 package['price']
             )
 
+            # Уведомляем реферера о бонусе
             if bonus_amount:
-                # Уведомляем реферера о бонусе
                 referrer_id = await db.get_user_referrer(message.from_id)
                 if referrer_id:
                     await message.bot.send_message(
@@ -92,15 +109,46 @@ async def successful_payment(message: Message, db: Database):
                         f"от оплаты вашего реферала!"
                     )
 
-            await message.answer(
+            # Уведомляем пользователя об успешной покупке
+            success_text = (
                 f"✅ Оплата успешно получена!\n"
-                f"💫 На ваш счет зачислено {package['credits']} кредитов",
-                reply_markup=Keyboards.main_menu()
+                f"💫 На ваш счет зачислено {package['credits']} кредитов\n\n"
+                f"Хотите начать обработку прямо сейчас?"
+            )
+            
+            # Клавиатура с кнопками быстрого действия
+            quick_action_keyboard = {
+                'inline_keyboard': [
+                    [
+                        {'text': '💫 Начать обработку', 'callback_data': 'start_processing'},
+                        {'text': '↩️ В главное меню', 'callback_data': 'back_to_menu'}
+                    ]
+                ]
+            }
+
+            await message.answer(
+                success_text,
+                reply_markup=quick_action_keyboard
             )
 
     except Exception as e:
-        print(f"Error in successful_payment: {e}")
+        logger.error(f"Error in successful_payment: {e}")
+        error_text = (
+            "❌ Произошла ошибка при обработке платежа.\n"
+            "Пожалуйста, свяжитесь с администратором бота."
+        )
         await message.answer(
-            "Произошла ошибка при обработке платежа",
+            error_text,
             reply_markup=Keyboards.back_keyboard()
+        )
+
+@router.pre_checkout_query()
+async def pre_checkout(pre_checkout_query):
+    try:
+        await pre_checkout_query.answer(ok=True)
+    except Exception as e:
+        logger.error(f"Error in pre_checkout: {e}")
+        await pre_checkout_query.answer(
+            ok=False,
+            error_message="Произошла ошибка при проверке платежа. Попробуйте позже."
         )

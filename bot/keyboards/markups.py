@@ -21,35 +21,26 @@ class Keyboards:
     def payment_menu():
         """Меню выбора пакета кредитов"""
         builder = InlineKeyboardBuilder()
-        
         for package in config.PACKAGES:
-            builder.row(InlineKeyboardButton(
-                text=f"{package['description']}",
-                callback_data=f"buy_{package['id']}_stars"
-            ))
-            
-        builder.row(InlineKeyboardButton(
-            text="↩️ Назад",
-            callback_data="back_to_menu"
-        ))
+            builder.row(
+                InlineKeyboardButton(
+                    text=package['description'],
+                    callback_data=f"buy_{package['id']}_stars"
+                )
+            )
+        builder.row(InlineKeyboardButton(text="↩️ Назад", callback_data="back_to_menu"))
         return builder.as_markup()
 
     @staticmethod
     def processing_cancel():
         """Кнопка отмены при обработке"""
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(
-            text="❌ Отмена",
-            callback_data="back_to_menu"
-        ))
+        builder.row(InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_menu"))
         return builder.as_markup()
 
     @staticmethod
     def back_keyboard():
-        """Кнопка возврата к главному меню"""
+        """Кнопка возврата в главное меню"""
         builder = InlineKeyboardBuilder()
-        builder.row(InlineKeyboardButton(
-            text="↩️ Назад",
-            callback_data="back_to_menu"
-        ))
+        builder.row(InlineKeyboardButton(text="↩️ Назад", callback_data="back_to_menu"))
         return builder.as_markup()
