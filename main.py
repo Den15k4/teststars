@@ -7,6 +7,7 @@ from aiogram.types import Message, TelegramObject
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.client.default import DefaultBotProperties
 from aiohttp import web
+import json
 
 from bot.config import config
 from bot.database.models import Database
@@ -57,6 +58,26 @@ dp.include_router(images.router)
 app = web.Application()
 clothoff_webhook = ClothOffWebhook(bot, db)
 
+# Маршруты
+async def handle_webhook(request: web.Request) -> web.Response:
+    """Обработчик webhook для Telegram"""
+    try:
+        data = await request.json()
+        logger.info(f"Received webhook: {data}")
+        await clothoff_webhook.handle_webhook(request)
+        return web.Response(text='OK')
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        return web.Response(status=500, text=str(e))
+
+# Обработчик проверки состояния
+async def health_check(request: web.Request) -> web.Response:
+    return web.Response(text='OK')
+
+# Добавляем роуты
+app.router.add_post('/clothoff/webhook', clothoff_webhook.handle_webhook)
+app.router.add_get('/health', health_check)
+
 # Базовые хэндлеры
 @dp.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, db: Database):
@@ -86,14 +107,12 @@ async def cmd_start(message: Message, command: CommandObject, db: Database):
         reply_markup=Keyboards.main_menu()
     )
 
-# Маршруты для вебхуков
-app.router.add_post('/webhook', clothoff_webhook.handle_webhook)
-
 async def run_webhook_server():
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
+    logger.info(f"Started webhook server at port 8080")
 
 # Функция запуска бота
 async def main():
