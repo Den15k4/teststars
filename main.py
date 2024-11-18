@@ -47,6 +47,53 @@ db = Database(config.DATABASE_URL)
 
 dp.update.middleware.register(DatabaseMiddleware(db))
 
+# Базовые хэндлеры должны быть зарегистрированы ДО подключения роутеров
+@dp.message(CommandStart())
+async def cmd_start(message: Message, db: Database):
+    """Обработчик команды /start"""
+    try:
+        user_id = message.from_user.id
+        username = message.from_user.username
+        
+        logger.info(f"Received /start command from user {user_id} ({username})")
+
+        # Добавляем пользователя в БД
+        await db.add_user(user_id, username)
+
+        # Проверяем наличие реферального параметра
+        start_command = message.text
+        if ' ' in start_command:
+            args = start_command.split()[1]
+            if args.startswith('ref'):
+                try:
+                    referrer_id = int(args[3:])
+                    logger.info(f"Processing referral: user {user_id} from referrer {referrer_id}")
+                    referral_system = ReferralSystem(db)
+                    error = await referral_system.process_referral(user_id, referrer_id)
+                    if not error:
+                        await message.answer("🎉 Вы успешно присоединились по реферальной ссылке!")
+                        logger.info(f"Successfully processed referral for user {user_id}")
+                except ValueError as e:
+                    logger.error(f"Error processing referral parameter: {e}")
+
+        # Отправляем приветственное сообщение
+        await message.answer(
+            "Добро пожаловать! 👋\n\n"
+            "Я помогу вам раздеть любую даму!🔞\n\n"
+            "Для начала работы приобретите кредиты 💸\n\n"
+            "Выберите действие:",
+            reply_markup=Keyboards.main_menu()
+        )
+        logger.info(f"Sent welcome message to user {user_id}")
+
+    except Exception as e:
+        logger.error(f"Error in start command handler: {e}", exc_info=True)
+        await message.answer(
+            "Произошла ошибка при запуске бота. Пожалуйста, попробуйте позже.",
+            reply_markup=Keyboards.main_menu()
+        )
+
+# Теперь подключаем роутеры
 dp.include_router(main_handlers.router)
 dp.include_router(payments.router)
 dp.include_router(referral.router)
@@ -128,7 +175,7 @@ async def cleanup_tasks():
                         except Exception as e:
                             logger.error(f"Error notifying user {task['user_id']}: {e}")
             
-            await asyncio.sleep(60)  # Проверяем каждую минуту
+            await asyncio.sleep(60)
             
         except Exception as e:
             logger.error(f"Error in cleanup task: {e}")
