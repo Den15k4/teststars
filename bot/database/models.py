@@ -63,26 +63,27 @@ class Database:
             ''')
 
     async def cleanup_stale_tasks(self, timeout_minutes: int = 30) -> None:
-        """Очистка зависших задач старше timeout_minutes минут"""
-        async with self.pool.acquire() as conn:
-            try:
-                # Находим и возвращаем кредиты за зависшие задачи
-                stale_tasks = await conn.fetch('''
-                    UPDATE users 
-                    SET credits = credits + 1,
-                        pending_task_id = NULL
-                    WHERE pending_task_id IS NOT NULL 
-                    AND last_used < NOW() - INTERVAL '{} minutes'
-                    RETURNING user_id, pending_task_id
-                ''', timeout_minutes)
+    """Очистка зависших задач старше timeout_minutes минут"""
+    async with self.pool.acquire() as conn:
+        try:
+            # Находим и возвращаем кредиты за зависшие задачи
+            stale_tasks = await conn.fetch('''
+                UPDATE users 
+                SET credits = credits + 1,
+                    pending_task_id = NULL,
+                    last_used = NULL
+                WHERE pending_task_id IS NOT NULL 
+                AND last_used < NOW() - INTERVAL '{} minutes'
+                RETURNING user_id, pending_task_id, last_used
+            ''', timeout_minutes)
 
-                # Логируем очистку
-                for task in stale_tasks:
-                    logger.info(f"Cleared stale task {task['pending_task_id']} for user {task['user_id']}")
+            logger.info(f"Found {len(stale_tasks)} stale tasks to clean up")
 
-            except Exception as e:
-                logger.error(f"Error cleaning up stale tasks: {e}")
-                raise
+            return stale_tasks
+
+        except Exception as e:
+            logger.error(f"Error cleaning up stale tasks: {e}")
+            raise
 
     async def check_active_task(self, user_id: int) -> Tuple[bool, Optional[str]]:
         """Проверка активной задачи с учетом таймаута"""

@@ -54,20 +54,20 @@ async def process_buy(callback: CallbackQuery, db: Database):
             await callback.answer("Пакет не найден", show_alert=True)
             return
 
-        # Отправляем сообщение о покупке без provider_token для Telegram Stars
-        await callback.message.answer_invoice(
-            title=f"Покупка {package['credits']} генераций",
-            description=f"{package['description']}\n\nПосле оплаты кредиты будут начислены автоматически",
-            payload=f"credits_{package_id}",
-            provider_token="",  # Для звезд оставляем пустым
-            currency="XTR",
-            prices=[
-                LabeledPrice(
-                    label=package['description'],
-                    amount=package['credits']  # Количество звезд
-                )
-            ],
-            protect_content=False
+        # Создаем URL для оплаты звездами напрямую
+        bot_username = (await callback.bot.get_me()).username
+        payment_url = f"https://t.me/{bot_username}/star/{package['credits']}"
+
+        await callback.message.edit_text(
+            f"💫 Покупка {package['description']}\n\n"
+            f"Стоимость: {package['credits']} звезд\n"
+            "После оплаты кредиты будут начислены автоматически",
+            reply_markup={
+                'inline_keyboard': [
+                    [{'text': f"⭐️ Оплатить {package['credits']} звезд", 'url': payment_url}],
+                    [{'text': "↩️ Назад", 'callback_data': "back_to_menu"}]
+                ]
+            }
         )
         await callback.answer()
 
@@ -80,6 +80,55 @@ async def process_buy(callback: CallbackQuery, db: Database):
 
 @router.message(F.successful_payment)
 async def successful_payment(message: Message, db: Database):
+    try:
+        # Получаем ID пакета из payload
+        package_id = int(message.successful_payment.invoice_payload.split("_")[1])
+        package = next(
+            (p for p in config.PACKAGES if p["id"] == package_id),
+            None
+        )
+
+        if package:
+            # Начисляем кредиты
+            await db.update_credits(message.from_id, package['credits'])
+
+            # Обрабатываем реферальный платеж
+            referral_system = ReferralSystem(db)
+            bonus_amount = await referral_system.process_referral_payment(
+                message.from_id,
+                package['price']
+            )
+
+            if bonus_amount and referral_system:
+                referrer_id = await db.get_user_referrer(message.from_id)
+                if referrer_id:
+                    await message.bot.send_message(
+                        referrer_id,
+                        f"🎁 Вы получили реферальный бонус {bonus_amount:.2f} RUB "
+                        f"от оплаты вашего реферала!"
+                    )
+
+            await message.answer(
+                f"✅ Оплата успешно получена!\n"
+                f"💫 На ваш счет зачислено {package['credits']} кредитов\n\n"
+                f"Хотите начать обработку прямо сейчас?",
+                reply_markup={
+                    'inline_keyboard': [
+                        [
+                            {'text': '💫 Начать обработку', 'callback_data': 'start_processing'},
+                            {'text': '↩️ В главное меню', 'callback_data': 'back_to_menu'}
+                        ]
+                    ]
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"Error in successful_payment: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при обработке платежа.\n"
+            "Пожалуйста, свяжитесь с администратором бота.",
+            reply_markup=Keyboards.back_keyboard()
+        )
     try:
         # Получаем ID пакета из payload
         package_id = int(message.successful_payment.invoice_payload.split("_")[1])
