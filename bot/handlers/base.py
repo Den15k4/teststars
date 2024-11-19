@@ -1,19 +1,35 @@
 import logging
-from aiogram import Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram import Router, types, F
+from aiogram.filters import CommandStart
+from aiogram.types import FSInputFile
 from bot.keyboards.markups import Keyboards
 
 logger = logging.getLogger(__name__)
+router = Router()
 
+@router.message(CommandStart())
 async def cmd_start(message: types.Message, db):
     """Обработчик команды /start"""
     try:
         user_id = message.from_user.id
         username = message.from_user.username
 
+        logger.info(f"Starting command received from user {user_id} ({username})")
+
         # Добавляем пользователя в БД
         await db.add_user(user_id, username)
-        
+
+        # Проверяем реферальный параметр
+        if message.text and ' ' in message.text:
+            args = message.text.split()[1]
+            if args.startswith('ref'):
+                try:
+                    referrer_id = int(args[3:])
+                    # Обработка реферала будет добавлена позже
+                    logger.info(f"Referral parameter detected: {referrer_id}")
+                except ValueError:
+                    logger.error("Invalid referral parameter")
+
         await message.answer(
             "Добро пожаловать! 👋\n\n"
             "Я помогу вам раздеть любую даму!🔞\n\n"
@@ -21,10 +37,13 @@ async def cmd_start(message: types.Message, db):
             "Выберите действие:",
             reply_markup=Keyboards.main_menu()
         )
-    except Exception as e:
-        logger.error(f"Error in start command: {e}")
-        await message.answer("Произошла ошибка. Попробуйте позже.")
+        logger.info(f"Welcome message sent to user {user_id}")
 
+    except Exception as e:
+        logger.error(f"Error in start command handler: {e}")
+        await message.answer("Произошла ошибка при запуске бота. Попробуйте позже.")
+
+@router.callback_query(F.data == "back_to_menu")
 async def back_to_menu(callback: types.CallbackQuery):
     """Обработчик возврата в главное меню"""
     try:
@@ -37,6 +56,7 @@ async def back_to_menu(callback: types.CallbackQuery):
         logger.error(f"Error in back_to_menu: {e}")
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
 
+@router.callback_query(F.data == "check_balance")
 async def check_balance(callback: types.CallbackQuery, db):
     """Обработчик проверки баланса"""
     try:
@@ -52,9 +72,3 @@ async def check_balance(callback: types.CallbackQuery, db):
     except Exception as e:
         logger.error(f"Error in check_balance: {e}")
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
-
-async def setup_base_handlers(dp: Dispatcher, db) -> None:
-    """Регистрация базовых обработчиков"""
-    dp.message.register(cmd_start, Command("start"))
-    dp.callback_query.register(back_to_menu, F.data == "back_to_menu")
-    dp.callback_query.register(check_balance, F.data == "check_balance")
