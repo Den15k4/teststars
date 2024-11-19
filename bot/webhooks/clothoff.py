@@ -1,10 +1,7 @@
 from aiohttp import web
 import logging
 from bot.keyboards.markups import Keyboards
-from aiogram.types import FSInputFile
-import tempfile
-import os
-from io import BytesIO
+from aiogram.types import BufferedInputFile
 
 logger = logging.getLogger(__name__)
 
@@ -16,28 +13,17 @@ class ClothOffWebhook:
 
     async def handle_webhook(self, request: web.Request) -> web.Response:
         """Обработчик вебхуков от ClothOff API"""
-        temp_file = None
         try:
-            # Получаем заголовки запроса
+            # Получаем заголовки запроса и параметры
             headers = request.headers
-            logger.info(f"Webhook headers: {dict(headers)}")
-            
-            # Получаем query параметры
             params = request.query
+            logger.info(f"Webhook headers: {dict(headers)}")
             logger.info(f"Webhook params: {dict(params)}")
 
             # Читаем тело запроса
             body = await request.read()
             logger.info(f"Получен webhook, размер данных: {len(body)} bytes")
             logger.info(f"Content-Type: {request.content_type}")
-
-            # Проверяем размер
-            if len(body) > 50 * 1024 * 1024:  # 50 MB
-                logger.error(f"Размер данных превышает лимит: {len(body)} bytes")
-                raise web.HTTPRequestEntityTooLarge(
-                    max_size=50 * 1024 * 1024,
-                    actual_size=len(body)
-                )
 
             # Получаем id_gen из параметров
             id_gen = params.get('id_gen')
@@ -58,19 +44,20 @@ class ClothOffWebhook:
                 logger.error(f"Пользователь не найден: {user_id}")
                 return web.Response(status=404, text="User not found")
 
-            # Если данные большие или это multipart, считаем что это изображение
+            # Обрабатываем изображение
             if len(body) > 100000 or request.content_type.startswith('multipart/form-data'):
                 logger.info("Обрабатываем как бинарные данные изображения")
                 try:
-                    # Создаем временный файл
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp:
-                        tmp.write(body)
-                        temp_file = tmp.name
+                    # Создаем InputFile из байтов
+                    input_file = BufferedInputFile(
+                        file=body,
+                        filename="result.jpg"
+                    )
 
                     # Отправляем фото
                     await self.bot.send_photo(
                         chat_id=user_id,
-                        photo=FSInputFile(temp_file),
+                        photo=input_file,
                         caption="✨ Мы её раздели! Любуйся!\nЧтобы обработать новое фото, нажмите кнопку 💫 Раздеть подругу",
                         reply_markup=self.keyboards.main_menu()
                     )
@@ -80,10 +67,8 @@ class ClothOffWebhook:
                     logger.info(f"Успешно отправлено обработанное изображение пользователю {user_id}")
                     
                     return web.Response(text='{"status":"success"}')
-
                 except Exception as e:
                     logger.error(f"Ошибка при отправке фото: {e}", exc_info=True)
-                    # Возвращаем кредит
                     await self.db.return_credit(user_id)
                     await self.db.clear_pending_task(user_id)
                     await self.bot.send_message(
@@ -99,11 +84,3 @@ class ClothOffWebhook:
         except Exception as e:
             logger.error(f"Критическая ошибка в обработчике webhook: {e}", exc_info=True)
             return web.Response(status=500, text=str(e))
-
-        finally:
-            # Удаляем временный файл
-            if temp_file and os.path.exists(temp_file):
-                try:
-                    os.unlink(temp_file)
-                except Exception as e:
-                    logger.error(f"Ошибка при удалении временного файла: {e}")
