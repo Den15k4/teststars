@@ -1,13 +1,16 @@
 import logging
 import aiohttp
-from aiogram import Dispatcher, types, F
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from bot.keyboards.markups import Keyboards
 from bot.services.clothoff import ClothOffAPI
+from bot.config import config
 
 logger = logging.getLogger(__name__)
+router = Router() # Добавляем определение router
 clothoff_api = ClothOffAPI()
 
+@router.callback_query(F.data == "start_processing")
 async def start_processing(callback: CallbackQuery, db):
     """Начало обработки изображения"""
     try:
@@ -48,6 +51,7 @@ async def start_processing(callback: CallbackQuery, db):
         logger.error(f"Error in start_processing: {e}")
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
 
+@router.message(F.photo)
 async def handle_photo(message: Message, db):
     """Обработка отправленной фотографии"""
     user_id = message.from_user.id
@@ -82,7 +86,7 @@ async def handle_photo(message: Message, db):
         file = await message.bot.get_file(photo.file_id)
         
         # Скачиваем изображение
-        file_url = f"https://api.telegram.org/file/bot{message.bot.token}/{file.file_path}"
+        file_url = f"https://api.telegram.org/file/bot{config.BOT_TOKEN}/{file.file_path}"
         async with aiohttp.ClientSession() as session:
             async with session.get(file_url) as response:
                 image_data = await response.read()
@@ -101,8 +105,8 @@ async def handle_photo(message: Message, db):
 
         await message.reply(
             "✅ Изображение принято в обработку:\n\n"
-            f"⏱ Время в очереди: {result['queue_time']} сек\n"
-            f"📊 Позиция в очереди: {result['queue_num']}\n"
+            f"⏱ Время в очереди: {result.get('queue_time', 0)} сек\n"
+            f"📊 Позиция в очереди: {result.get('queue_num', 0)}\n"
             f"🔄 ID задачи: {result['id_gen']}\n\n"
             "🔍 Результат будет отправлен, когда обработка завершится.\n"
             "⏳ Если результат не придет в течение 30 минут, задача будет отменена автоматически.",
@@ -136,8 +140,3 @@ async def handle_photo(message: Message, db):
                 await processing_msg.delete()
             except Exception as e:
                 logger.error(f"Error deleting processing message: {e}")
-
-async def setup_image_handlers(dp: Dispatcher, db) -> None:
-    """Регистрация обработчиков изображений"""
-    dp.callback_query.register(start_processing, F.data == "start_processing")
-    dp.message.register(handle_photo, F.photo)
