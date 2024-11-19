@@ -30,13 +30,9 @@ clothoff_webhook = ClothOffWebhook(bot, db)
 
 async def on_startup():
     """Действия при запуске бота"""
-    # Подключаемся к БД
     await db.connect()
     await db.init_db()
-    
-    # Регистрируем обработчики
     await setup_handlers(dp, db)
-    
     logger.info("Бот запущен")
 
 async def on_shutdown():
@@ -57,9 +53,8 @@ webhook_handler = SimpleRequestHandler(
 webhook_handler.register(app, path='/telegram-webhook')
 
 # Регистрируем хэндлеры событий
-app.on_startup.append(on_startup)
-app.on_shutdown.append(on_shutdown)
+app.on_startup.append(lambda app: asyncio.create_task(on_startup()))
+app.on_shutdown.append(lambda app: asyncio.create_task(on_shutdown()))
 
 if __name__ == '__main__':
-    # Запускаем приложение
     web.run_app(app, host='0.0.0.0', port=8080)
